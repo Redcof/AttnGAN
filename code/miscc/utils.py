@@ -12,18 +12,17 @@ import skimage.transform
 
 from miscc.config import cfg
 
-
 # For visualization ################################################
-COLOR_DIC = {0:[128,64,128],  1:[244, 35,232],
-             2:[70, 70, 70],  3:[102,102,156],
-             4:[190,153,153], 5:[153,153,153],
-             6:[250,170, 30], 7:[220, 220, 0],
-             8:[107,142, 35], 9:[152,251,152],
-             10:[70,130,180], 11:[220,20, 60],
-             12:[255, 0, 0],  13:[0, 0, 142],
-             14:[119,11, 32], 15:[0, 60,100],
-             16:[0, 80, 100], 17:[0, 0, 230],
-             18:[0,  0, 70],  19:[0, 0,  0]}
+COLOR_DIC = {0: [128, 64, 128], 1: [244, 35, 232],
+             2: [70, 70, 70], 3: [102, 102, 156],
+             4: [190, 153, 153], 5: [153, 153, 153],
+             6: [250, 170, 30], 7: [220, 220, 0],
+             8: [107, 142, 35], 9: [152, 251, 152],
+             10: [70, 130, 180], 11: [220, 20, 60],
+             12: [255, 0, 0], 13: [0, 0, 142],
+             14: [119, 11, 32], 15: [0, 60, 100],
+             16: [0, 80, 100], 17: [0, 0, 230],
+             18: [0, 0, 70], 19: [0, 0, 0]}
 FONT_MAX = 50
 
 
@@ -31,8 +30,7 @@ def drawCaption(convas, captions, ixtoword, vis_size, off1=2, off2=2):
     num = captions.size(0)
     img_txt = Image.fromarray(convas)
     # get a font
-    # fnt = None  # ImageFont.truetype('Pillow/Tests/fonts/FreeMono.ttf', 50)
-    fnt = ImageFont.truetype('Pillow/Tests/fonts/FreeMono.ttf', 50)
+    fnt = None
     # get a drawing context
     d = ImageDraw.Draw(img_txt)
     sentence_list = []
@@ -54,6 +52,7 @@ def build_super_images(real_imgs, captions, ixtoword,
                        attn_maps, att_sze, lr_imgs=None,
                        batch_size=cfg.TRAIN.BATCH_SIZE,
                        max_word_num=cfg.TEXT.WORDS_NUM):
+    return None, None
     nvis = 8
     real_imgs = real_imgs[:nvis]
     if lr_imgs is not None:
@@ -62,18 +61,17 @@ def build_super_images(real_imgs, captions, ixtoword,
         vis_size = att_sze * 16
     else:
         vis_size = real_imgs.size(2)
-
+    
     text_convas = \
         np.ones([batch_size * FONT_MAX,
                  (max_word_num + 2) * (vis_size + 2), 3],
                 dtype=np.uint8)
-
+    
     for i in range(max_word_num):
         istart = (i + 2) * (vis_size + 2)
         iend = (i + 3) * (vis_size + 2)
         text_convas[:, istart:iend, :] = COLOR_DIC[i]
-
-
+    
     real_imgs = \
         nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(real_imgs)
     # [-1, 1] --> [0, 1]
@@ -92,16 +90,16 @@ def build_super_images(real_imgs, captions, ixtoword,
         lr_imgs = lr_imgs.data.numpy()
         # b x c x h x w --> b x h x w x c
         lr_imgs = np.transpose(lr_imgs, (0, 2, 3, 1))
-
+    
     # batch x seq_len x 17 x 17 --> batch x 1 x 17 x 17
     seq_len = max_word_num
     img_set = []
     num = nvis  # len(attn_maps)
-
+    
     text_map, sentences = \
         drawCaption(text_convas, captions, ixtoword, vis_size)
     text_map = np.asarray(text_map).astype(np.uint8)
-
+    
     bUpdate = 1
     for i in range(num):
         attn = attn_maps[i].cpu().view(1, -1, att_sze, att_sze)
@@ -182,8 +180,8 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
     max_word_num = np.max(cap_lens)
     text_convas = np.ones([batch_size * FONT_MAX,
                            max_word_num * (vis_size + 2), 3],
-                           dtype=np.uint8)
-
+                          dtype=np.uint8)
+    
     real_imgs = \
         nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(real_imgs)
     # [-1, 1] --> [0, 1]
@@ -193,15 +191,15 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
     real_imgs = np.transpose(real_imgs, (0, 2, 3, 1))
     pad_sze = real_imgs.shape
     middle_pad = np.zeros([pad_sze[2], 2, 3])
-
+    
     # batch x seq_len x 17 x 17 --> batch x 1 x 17 x 17
     img_set = []
     num = len(attn_maps)
-
+    
     text_map, sentences = \
         drawCaption(text_convas, captions, ixtoword, vis_size, off1=0)
     text_map = np.asarray(text_map).astype(np.uint8)
-
+    
     bUpdate = 1
     for i in range(num):
         attn = attn_maps[i].cpu().view(1, -1, att_sze, att_sze)
@@ -211,7 +209,7 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
         # n x c x h x w --> n x h x w x c
         attn = np.transpose(attn, (0, 2, 3, 1))
         num_attn = cap_lens[i]
-        thresh = 2./float(num_attn)
+        thresh = 2. / float(num_attn)
         #
         img = real_imgs[i]
         row = []
@@ -234,7 +232,7 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
             one_map = (one_map - minV) / (maxV - minV)
             row_beforeNorm.append(one_map)
         sorted_indices = np.argsort(conf_score)[::-1]
-
+        
         for j in range(num_attn):
             one_map = row_beforeNorm[j]
             one_map *= 255
@@ -247,13 +245,13 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
             merged.paste(PIL_im, (0, 0))
             merged.paste(PIL_att, (0, 0), mask)
             merged = np.array(merged)[:, :, :3]
-
+            
             row.append(np.concatenate([one_map, middle_pad], 1))
             #
             row_merge.append(np.concatenate([merged, middle_pad], 1))
             #
             txt = text_map[i * FONT_MAX:(i + 1) * FONT_MAX,
-                           j * (vis_size + 2):(j + 1) * (vis_size + 2), :]
+                  j * (vis_size + 2):(j + 1) * (vis_size + 2), :]
             row_txt.append(txt)
         # reorder
         row_new = []
