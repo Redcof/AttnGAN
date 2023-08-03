@@ -443,15 +443,13 @@ class G_NET(nn.Module):
             fake_img1 = self.img_net1(h_code1)
             fake_imgs.append(fake_img1)
         if cfg.TREE.BRANCH_NUM > 1:
-            h_code2, att1 = \
-                self.h_net2(h_code1, c_code, word_embs, mask)
+            h_code2, att1 = self.h_net2(h_code1, c_code, word_embs, mask)
             fake_img2 = self.img_net2(h_code2)
             fake_imgs.append(fake_img2)
             if att1 is not None:
                 att_maps.append(att1)
         if cfg.TREE.BRANCH_NUM > 2:
-            h_code3, att2 = \
-                self.h_net3(h_code2, c_code, word_embs, mask)
+            h_code3, att2 = self.h_net3(h_code2, c_code, word_embs, mask)
             fake_img3 = self.img_net3(h_code3)
             fake_imgs.append(fake_img3)
             if att2 is not None:

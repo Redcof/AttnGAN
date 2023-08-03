@@ -52,7 +52,6 @@ def build_super_images(real_imgs, captions, ixtoword,
                        attn_maps, att_sze, lr_imgs=None,
                        batch_size=cfg.TRAIN.BATCH_SIZE,
                        max_word_num=cfg.TEXT.WORDS_NUM):
-    return None, None
     nvis = 8
     real_imgs = real_imgs[:nvis]
     if lr_imgs is not None:
@@ -62,18 +61,16 @@ def build_super_images(real_imgs, captions, ixtoword,
     else:
         vis_size = real_imgs.size(2)
     
-    text_convas = \
-        np.ones([batch_size * FONT_MAX,
-                 (max_word_num + 2) * (vis_size + 2), 3],
-                dtype=np.uint8)
+    text_convas = np.ones([batch_size * FONT_MAX,
+                           (max_word_num + 2) * (vis_size + 2), 3],
+                          dtype=np.uint8)
     
     for i in range(max_word_num):
         istart = (i + 2) * (vis_size + 2)
         iend = (i + 3) * (vis_size + 2)
         text_convas[:, istart:iend, :] = COLOR_DIC[i]
     
-    real_imgs = \
-        nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(real_imgs)
+    real_imgs = nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(real_imgs)
     # [-1, 1] --> [0, 1]
     real_imgs.add_(1).div_(2).mul_(255)
     real_imgs = real_imgs.data.numpy()
@@ -83,8 +80,7 @@ def build_super_images(real_imgs, captions, ixtoword,
     middle_pad = np.zeros([pad_sze[2], 2, 3])
     post_pad = np.zeros([pad_sze[1], pad_sze[2], 3])
     if lr_imgs is not None:
-        lr_imgs = \
-            nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(lr_imgs)
+        lr_imgs = nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(lr_imgs)
         # [-1, 1] --> [0, 1]
         lr_imgs.add_(1).div_(2).mul_(255)
         lr_imgs = lr_imgs.data.numpy()
@@ -94,10 +90,9 @@ def build_super_images(real_imgs, captions, ixtoword,
     # batch x seq_len x 17 x 17 --> batch x 1 x 17 x 17
     seq_len = max_word_num
     img_set = []
-    num = nvis  # len(attn_maps)
+    num = len(attn_maps)
     
-    text_map, sentences = \
-        drawCaption(text_convas, captions, ixtoword, vis_size)
+    text_map, sentences = drawCaption(text_convas, captions, ixtoword, vis_size)
     text_map = np.asarray(text_map).astype(np.uint8)
     
     bUpdate = 1
@@ -125,9 +120,8 @@ def build_super_images(real_imgs, captions, ixtoword,
         for j in range(num_attn):
             one_map = attn[j]
             if (vis_size // att_sze) > 1:
-                one_map = \
-                    skimage.transform.pyramid_expand(one_map, sigma=20,
-                                                     upscale=vis_size // att_sze)
+                one_map = skimage.transform.pyramid_expand(one_map, sigma=20, channel_axis=2,
+                                                           upscale=vis_size // att_sze)
             row_beforeNorm.append(one_map)
             minV = one_map.min()
             maxV = one_map.max()
@@ -143,8 +137,7 @@ def build_super_images(real_imgs, captions, ixtoword,
                 #
                 PIL_im = Image.fromarray(np.uint8(img))
                 PIL_att = Image.fromarray(np.uint8(one_map))
-                merged = \
-                    Image.new('RGBA', (vis_size, vis_size), (0, 0, 0, 0))
+                merged = Image.new('RGBA', (vis_size, vis_size), (0, 0, 0, 0))
                 mask = Image.new('L', (vis_size, vis_size), (210))
                 merged.paste(PIL_im, (0, 0))
                 merged.paste(PIL_att, (0, 0), mask)
@@ -182,8 +175,7 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
                            max_word_num * (vis_size + 2), 3],
                           dtype=np.uint8)
     
-    real_imgs = \
-        nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(real_imgs)
+    real_imgs = nn.Upsample(size=(vis_size, vis_size), mode='bilinear')(real_imgs)
     # [-1, 1] --> [0, 1]
     real_imgs.add_(1).div_(2).mul_(255)
     real_imgs = real_imgs.data.numpy()
@@ -196,8 +188,7 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
     img_set = []
     num = len(attn_maps)
     
-    text_map, sentences = \
-        drawCaption(text_convas, captions, ixtoword, vis_size, off1=0)
+    text_map, sentences = drawCaption(text_convas, captions, ixtoword, vis_size, off1=0)
     text_map = np.asarray(text_map).astype(np.uint8)
     
     bUpdate = 1
@@ -224,9 +215,8 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
             mask = one_map > thresh
             one_map = one_map * mask
             if (vis_size // att_sze) > 1:
-                one_map = \
-                    skimage.transform.pyramid_expand(one_map, sigma=20,
-                                                     upscale=vis_size // att_sze)
+                one_map = skimage.transform.pyramid_expand(one_map, sigma=20,
+                                                           upscale=vis_size // att_sze)
             minV = one_map.min()
             maxV = one_map.max()
             one_map = (one_map - minV) / (maxV - minV)
@@ -239,8 +229,7 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
             #
             PIL_im = Image.fromarray(np.uint8(img))
             PIL_att = Image.fromarray(np.uint8(one_map))
-            merged = \
-                Image.new('RGBA', (vis_size, vis_size), (0, 0, 0, 0))
+            merged = Image.new('RGBA', (vis_size, vis_size), (0, 0, 0, 0))
             mask = Image.new('L', (vis_size, vis_size), (180))  # (210)
             merged.paste(PIL_im, (0, 0))
             merged.paste(PIL_att, (0, 0), mask)

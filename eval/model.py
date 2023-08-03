@@ -17,10 +17,10 @@ class RNN_ENCODER(nn.Module):
     def __init__(self, ntoken, ninput=300, drop_prob=0.5,
                  nhidden=128, nlayers=1, bidirectional=True):
         super(RNN_ENCODER, self).__init__()
-
+        
         self.n_steps = cfg.TEXT.WORDS_NUM
         self.rnn_type = cfg.RNN_TYPE
-
+        
         self.ntoken = ntoken  # size of the dictionary
         self.ninput = ninput  # size of each embedding vector
         self.drop_prob = drop_prob  # probability of an element to be zeroed
@@ -33,10 +33,10 @@ class RNN_ENCODER(nn.Module):
             self.num_directions = 1
         # number of features in the hidden state
         self.nhidden = nhidden // self.num_directions
-
+        
         self.define_module()
         self.init_weights()
-
+    
     def define_module(self):
         self.encoder = nn.Embedding(self.ntoken, self.ninput)
         self.drop = nn.Dropout(self.drop_prob)
@@ -54,7 +54,7 @@ class RNN_ENCODER(nn.Module):
                               bidirectional=self.bidirectional)
         else:
             raise NotImplementedError
-
+    
     def init_weights(self):
         initrange = 0.1
         self.encoder.weight.data.uniform_(-initrange, initrange)
@@ -62,7 +62,7 @@ class RNN_ENCODER(nn.Module):
         # http://pytorch.org/docs/master/_modules/torch/nn/modules/rnn.html#LSTM
         # self.decoder.weight.data.uniform_(-initrange, initrange)
         # self.decoder.bias.data.fill_(0)
-
+    
     def init_hidden(self, bsz):
         weight = next(self.parameters()).data
         if self.rnn_type == 'LSTM':
@@ -73,7 +73,7 @@ class RNN_ENCODER(nn.Module):
         else:
             return Variable(weight.new(self.nlayers * self.num_directions,
                                        bsz, self.nhidden).zero_())
-
+    
     def forward(self, captions, cap_lens, hidden, mask=None):
         # input: torch.LongTensor of size batch x n_steps
         # --> emb: batch x n_steps x ninput
@@ -103,19 +103,16 @@ class RNN_ENCODER(nn.Module):
         return words_emb, sent_emb
 
 
-
-
 class G_NET(nn.Module):
     def __init__(self):
         super(G_NET, self).__init__()
-
+        
         ngf = cfg.GAN.GF_DIM
         nef = cfg.TEXT.EMBEDDING_DIM
         ncf = cfg.GAN.CONDITION_DIM
-
         
         self.ca_net = CA_NET()
-
+        
         if cfg.TREE.BRANCH_NUM > 0:
             self.h_net1 = INIT_STAGE_G(ngf * 16, ncf)
             self.img_net1 = GET_IMAGE_G(ngf)
@@ -126,7 +123,7 @@ class G_NET(nn.Module):
         if cfg.TREE.BRANCH_NUM > 2:
             self.h_net3 = NEXT_STAGE_G(ngf, nef, ncf)
             self.img_net3 = GET_IMAGE_G(ngf)
-
+    
     def forward(self, z_code, sent_emb, word_embs, mask):
         """
             :param z_code: batch x cfg.GAN.Z_DIM
@@ -138,26 +135,24 @@ class G_NET(nn.Module):
         fake_imgs = []
         att_maps = []
         c_code, mu, logvar = self.ca_net(sent_emb)
-
+        
         if cfg.TREE.BRANCH_NUM > 0:
             h_code1 = self.h_net1(z_code, c_code)
             fake_img1 = self.img_net1(h_code1)
             fake_imgs.append(fake_img1)
         if cfg.TREE.BRANCH_NUM > 1:
-            h_code2, att1 = \
-                self.h_net2(h_code1, c_code, word_embs, mask)
+            h_code2, att1 = self.h_net2(h_code1, c_code, word_embs, mask)
             fake_img2 = self.img_net2(h_code2)
             fake_imgs.append(fake_img2)
             if att1 is not None:
                 att_maps.append(att1)
         if cfg.TREE.BRANCH_NUM > 2:
-            h_code3, att2 = \
-                self.h_net3(h_code2, c_code, word_embs, mask)
+            h_code3, att2 = self.h_net3(h_code2, c_code, word_embs, mask)
             fake_img3 = self.img_net3(h_code3)
             fake_imgs.append(fake_img3)
             if att2 is not None:
                 att_maps.append(att2)
-
+        
         return fake_imgs, att_maps, mu, logvar
 
 
@@ -167,19 +162,19 @@ class CA_NET(nn.Module):
     # (https://github.com/pytorch/examples/blob/master/vae/main.py)
     def __init__(self):
         super(CA_NET, self).__init__()
-
+        
         self.t_dim = cfg.TEXT.EMBEDDING_DIM
         self.c_dim = cfg.GAN.CONDITION_DIM
         
         self.fc = nn.Linear(self.t_dim, self.c_dim * 4, bias=True)
         self.relu = GLU()
-
+    
     def encode(self, text_embedding):
         x = self.relu(self.fc(text_embedding))
         mu = x[:, :self.c_dim]
         logvar = x[:, self.c_dim:]
         return mu, logvar
-
+    
     def reparametrize(self, mu, logvar):
         std = logvar.mul(0.5).exp_()
         if cfg.CUDA:
@@ -188,22 +183,21 @@ class CA_NET(nn.Module):
             eps = torch.FloatTensor(std.size()).normal_()
         eps = Variable(eps)
         return eps.mul(std).add_(mu)
-
+    
     def forward(self, text_embedding):
         mu, logvar = self.encode(text_embedding)
         c_code = self.reparametrize(mu, logvar)
         return c_code, mu, logvar
 
 
-
 class GLU(nn.Module):
     def __init__(self):
         super(GLU, self).__init__()
-
+    
     def forward(self, x):
         nc = x.size(1)
         assert nc % 2 == 0, 'channels dont divide 2!'
-        nc = int(nc/2)
+        nc = int(nc / 2)
         return x[:, :nc] * F.sigmoid(x[:, nc:])
 
 
@@ -247,13 +241,12 @@ class ResBlock(nn.Module):
             GLU(),
             conv3x3(channel_num, channel_num),
             nn.BatchNorm2d(channel_num))
-
+    
     def forward(self, x):
         residual = x
         out = self.block(x)
         out += residual
         return out
-
 
 
 class CNN_ENCODER(nn.Module):
@@ -263,7 +256,7 @@ class CNN_ENCODER(nn.Module):
             self.nef = nef
         else:
             self.nef = 256  # define a uniform ranker
-
+        
         model = models.inception_v3()
         url = 'https://download.pytorch.org/models/inception_v3_google-1a9a5a14.pth'
         model.load_state_dict(model_zoo.load_url(url))
@@ -271,10 +264,10 @@ class CNN_ENCODER(nn.Module):
             param.requires_grad = False
         print('Load pretrained model from ', url)
         # print(model)
-
+        
         self.define_module(model)
         self.init_trainable_weights()
-
+    
     def define_module(self, model):
         self.Conv2d_1a_3x3 = model.Conv2d_1a_3x3
         self.Conv2d_2a_3x3 = model.Conv2d_2a_3x3
@@ -292,15 +285,15 @@ class CNN_ENCODER(nn.Module):
         self.Mixed_7a = model.Mixed_7a
         self.Mixed_7b = model.Mixed_7b
         self.Mixed_7c = model.Mixed_7c
-
+        
         self.emb_features = conv1x1(768, self.nef)
         self.emb_cnn_code = nn.Linear(2048, self.nef)
-
+    
     def init_trainable_weights(self):
         initrange = 0.1
         self.emb_features.weight.data.uniform_(-initrange, initrange)
         self.emb_cnn_code.weight.data.uniform_(-initrange, initrange)
-
+    
     def forward(self, x):
         features = None
         # --> fixed-size input: batch x 3 x 299 x 299
@@ -318,7 +311,7 @@ class CNN_ENCODER(nn.Module):
         # 73 x 73 x 80
         x = self.Conv2d_4a_3x3(x)
         # 71 x 71 x 192
-
+        
         x = F.max_pool2d(x, kernel_size=3, stride=2)
         # 35 x 35 x 192
         x = self.Mixed_5b(x)
@@ -327,7 +320,7 @@ class CNN_ENCODER(nn.Module):
         # 35 x 35 x 288
         x = self.Mixed_5d(x)
         # 35 x 35 x 288
-
+        
         x = self.Mixed_6a(x)
         # 17 x 17 x 768
         x = self.Mixed_6b(x)
@@ -338,11 +331,11 @@ class CNN_ENCODER(nn.Module):
         # 17 x 17 x 768
         x = self.Mixed_6e(x)
         # 17 x 17 x 768
-
+        
         # image region features
         features = x
         # 17 x 17 x 768
-
+        
         x = self.Mixed_7a(x)
         # 8 x 8 x 1280
         x = self.Mixed_7b(x)
@@ -355,7 +348,7 @@ class CNN_ENCODER(nn.Module):
         # 1 x 1 x 2048
         x = x.view(x.size(0), -1)
         # 2048
-
+        
         # global image features
         cnn_code = self.emb_cnn_code(x)
         # 512
@@ -369,9 +362,9 @@ class INIT_STAGE_G(nn.Module):
         super(INIT_STAGE_G, self).__init__()
         self.gf_dim = ngf
         self.in_dim = cfg.GAN.Z_DIM + ncf  # cfg.TEXT.EMBEDDING_DIM
-
+        
         self.define_module()
-
+    
     def define_module(self):
         nz, ngf = self.in_dim, self.gf_dim
         self.fc = nn.Sequential(
@@ -379,12 +372,12 @@ class INIT_STAGE_G(nn.Module):
             # removing for single instance caption
             nn.BatchNorm1d(ngf * 4 * 4 * 2),
             GLU())
-
+        
         self.upsample1 = upBlock(ngf, ngf // 2)
         self.upsample2 = upBlock(ngf // 2, ngf // 4)
         self.upsample3 = upBlock(ngf // 4, ngf // 8)
         self.upsample4 = upBlock(ngf // 8, ngf // 16)
-
+    
     def forward(self, z_code, c_code):
         """
         :param z_code: batch x cfg.GAN.Z_DIM
@@ -403,7 +396,7 @@ class INIT_STAGE_G(nn.Module):
         out_code32 = self.upsample3(out_code)
         # state size ngf/16 x 64 x 64
         out_code64 = self.upsample4(out_code32)
-
+        
         return out_code64
 
 
@@ -415,19 +408,19 @@ class NEXT_STAGE_G(nn.Module):
         self.cf_dim = ncf
         self.num_residual = cfg.GAN.R_NUM
         self.define_module()
-
+    
     def _make_layer(self, block, channel_num):
         layers = []
         for i in range(cfg.GAN.R_NUM):
             layers.append(block(channel_num))
         return nn.Sequential(*layers)
-
+    
     def define_module(self):
         ngf = self.gf_dim
         self.att = ATT_NET(ngf, self.ef_dim)
         self.residual = self._make_layer(ResBlock, ngf * 2)
         self.upsample = upBlock(ngf * 2, ngf)
-
+    
     def forward(self, h_code, c_code, word_embs, mask):
         """
             h_code1(query):  batch x idf x ih x iw (queryL=ihxiw)
@@ -439,10 +432,10 @@ class NEXT_STAGE_G(nn.Module):
         c_code, att = self.att(h_code, word_embs)
         h_c_code = torch.cat((h_code, c_code), 1)
         out_code = self.residual(h_c_code)
-
+        
         # state size ngf/2 x 2in_size x 2in_size
         out_code = self.upsample(out_code)
-
+        
         return out_code, att
 
 
@@ -454,7 +447,7 @@ class GET_IMAGE_G(nn.Module):
             conv3x3(ngf, 3),
             nn.Tanh()
         )
-
+    
     def forward(self, h_code):
         out_img = self.img(h_code)
         return out_img
@@ -467,7 +460,7 @@ class G_DCGAN(nn.Module):
         nef = cfg.TEXT.EMBEDDING_DIM
         ncf = cfg.GAN.CONDITION_DIM
         self.ca_net = CA_NET()
-
+        
         # 16gf x 64 x 64 --> gf x 64 x 64 --> 3 x 64 x 64
         if cfg.TREE.BRANCH_NUM > 0:
             self.h_net1 = INIT_STAGE_G(ngf * 16, ncf)
@@ -477,7 +470,7 @@ class G_DCGAN(nn.Module):
         if cfg.TREE.BRANCH_NUM > 2:
             self.h_net3 = NEXT_STAGE_G(ngf, nef, ncf)
         self.img_net = GET_IMAGE_G(ngf)
-
+    
     def forward(self, z_code, sent_emb, word_embs, mask):
         """
             :param z_code: batch x cfg.GAN.Z_DIM
@@ -498,7 +491,7 @@ class G_DCGAN(nn.Module):
             h_code, att2 = self.h_net3(h_code, c_code, word_embs, mask)
             if att2 is not None:
                 att_maps.append(att2)
-
+        
         fake_imgs = self.img_net(h_code)
         return [fake_imgs], att_maps, mu, logvar
 
@@ -553,11 +546,11 @@ class D_GET_LOGITS(nn.Module):
         self.bcondition = bcondition
         if self.bcondition:
             self.jointConv = Block3x3_leakRelu(ndf * 8 + nef, ndf * 8)
-
+        
         self.outlogits = nn.Sequential(
             nn.Conv2d(ndf * 8, 1, kernel_size=4, stride=4),
             nn.Sigmoid())
-
+    
     def forward(self, h_code, c_code=None):
         if self.bcondition and c_code is not None:
             # conditioning output
@@ -569,7 +562,7 @@ class D_GET_LOGITS(nn.Module):
             h_c_code = self.jointConv(h_c_code)
         else:
             h_c_code = h_code
-
+        
         output = self.outlogits(h_c_code)
         return output.view(-1)
 
@@ -586,7 +579,7 @@ class D_NET64(nn.Module):
         else:
             self.UNCOND_DNET = None
         self.COND_DNET = D_GET_LOGITS(ndf, nef, bcondition=True)
-
+    
     def forward(self, x_var):
         x_code4 = self.img_code_s16(x_var)  # 4 x 4 x 8df
         return x_code4
@@ -607,10 +600,10 @@ class D_NET128(nn.Module):
         else:
             self.UNCOND_DNET = None
         self.COND_DNET = D_GET_LOGITS(ndf, nef, bcondition=True)
-
+    
     def forward(self, x_var):
-        x_code8 = self.img_code_s16(x_var)   # 8 x 8 x 8df
-        x_code4 = self.img_code_s32(x_code8)   # 4 x 4 x 16df
+        x_code8 = self.img_code_s16(x_var)  # 8 x 8 x 8df
+        x_code4 = self.img_code_s32(x_code8)  # 4 x 4 x 16df
         x_code4 = self.img_code_s32_1(x_code4)  # 4 x 4 x 8df
         return x_code4
 
@@ -631,7 +624,7 @@ class D_NET256(nn.Module):
         else:
             self.UNCOND_DNET = None
         self.COND_DNET = D_GET_LOGITS(ndf, nef, bcondition=True)
-
+    
     def forward(self, x_var):
         x_code16 = self.img_code_s16(x_var)
         x_code8 = self.img_code_s32(x_code16)

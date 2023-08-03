@@ -82,8 +82,7 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
         w_total_loss1 += w_loss1.data
         loss = w_loss0 + w_loss1
         
-        s_loss0, s_loss1 = \
-            sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
+        s_loss0, s_loss1 = sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
         loss += s_loss0 + s_loss1
         s_total_loss0 += s_loss0.data
         s_total_loss1 += s_loss1.data
@@ -119,9 +118,8 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
             w_total_loss1 = 0
             start_time = time.time()
             # attention Maps
-            img_set, _ = \
-                build_super_images(imgs[-1].cpu(), captions,
-                                   ixtoword, attn_maps, att_sze)
+            img_set, _ = build_super_images(imgs[-1].cpu(), captions,
+                                            ixtoword, attn_maps, att_sze)
             if img_set is not None:
                 im = Image.fromarray(img_set)
                 fullpath = '%s/attention_maps%d.png' % (image_dir, step)
@@ -149,8 +147,7 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size):
                                             cap_lens, class_ids, batch_size)
         w_total_loss += (w_loss0 + w_loss1).data
         
-        s_loss0, s_loss1 = \
-            sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
+        s_loss0, s_loss1 = sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
         s_total_loss += (s_loss0 + s_loss1).data
         
         if step == 50:
@@ -219,7 +216,7 @@ if __name__ == "__main__":
     ##########################################################################
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = '../output/%s_%s_%s' % \
+    output_dir = 'output/%s_%s_%s' % \
                  (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
     
     model_dir = os.path.join(output_dir, 'Model')
@@ -243,9 +240,8 @@ if __name__ == "__main__":
     
     print(dataset.n_words, dataset.embeddings_num)
     assert dataset
-    dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, drop_last=True,
-        shuffle=True, num_workers=int(cfg.WORKERS))
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, drop_last=True,
+                                             shuffle=True, num_workers=int(cfg.WORKERS))
     
     # # validation data #
     dataset_val = TextDataset(cfg.DATA_DIR, 'test',
