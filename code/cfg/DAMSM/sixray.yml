@@ -1,7 +1,7 @@
-CONFIG_NAME: 'DAMSM'
+CONFIG_NAME: 'local_DAMSM'
 experiment_description: 'mlflow testing form local machine'
-DATASET_NAME: 'birds'
-DATA_DIR: './data/birds'
+DATASET_NAME: 'sixray'
+DATA_DIR: './data/sixray_2361'
 GPU_ID: 0
 WORKERS: 1
 RNN_TYPE: GRU
@@ -13,10 +13,10 @@ TREE:
 
 TRAIN:
   FLAG: True
-  NET_E: ''  # '../DAMSMencoders/bird/text_encoder200.pth'
+  NET_E: ''
   BATCH_SIZE: 6
-  MAX_EPOCH: 3
-  SNAPSHOT_INTERVAL: 1
+  MAX_EPOCH: 600
+  SNAPSHOT_INTERVAL: 50
   ENCODER_LR: 0.002  # 0.0002best; 0.002good; scott: 0.0007 with 0.98decay
   RNN_GRAD_CLIP: 0.25
   SMOOTH:
@@ -28,4 +28,4 @@ TRAIN:
 
 TEXT:
   EMBEDDING_DIM: 256
-  CAPTIONS_PER_IMAGE: 10
+  CAPTIONS_PER_IMAGE: 5

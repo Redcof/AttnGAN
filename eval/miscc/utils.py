@@ -10,6 +10,8 @@ from PIL import Image, ImageDraw, ImageFont
 from copy import deepcopy
 import skimage.transform
 
+from logger import logger
+
 # For visualization ################################################
 COLOR_DIC = {0: [128, 64, 128], 1: [244, 35, 232],
              2: [70, 70, 70], 3: [102, 102, 156],
@@ -136,8 +138,7 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
         row_merge = np.concatenate(row_merge_new[:topK], 1)
         txt = np.concatenate(txt_new[:topK], 1)
         if txt.shape[1] != row.shape[1]:
-            print('Warnings: txt', txt.shape, 'row', row.shape,
-                  'row_merge_new', row_merge_new.shape)
+            logger.debug('Warnings: txt %s, row: %s, row_merge_new: %s' % (txt.shape, row.shape, row_merge_new.shape))
             bUpdate = 0
             break
         row = np.concatenate([txt, row_merge], 0)

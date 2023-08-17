@@ -10,6 +10,8 @@ from PIL import Image
 import torch.onnx
 from datetime import datetime
 from torch.autograd import Variable
+
+from logger import logger
 from miscc.config import cfg
 from miscc.utils import build_super_images2
 from model import RNN_ENCODER, G_NET
@@ -82,18 +84,18 @@ def generate(caption, wordtoix, ixtoword, text_encoder, netG, blob_service, copi
     # ONNX EXPORT
     # export = os.environ["EXPORT_MODEL"].lower() == 'true'
     if False:
-        print("saving text_encoder.onnx")
+        logger.info("saving text_encoder.onnx")
         text_encoder_out = torch.onnx._export(text_encoder, (captions, cap_lens, hidden), "text_encoder.onnx",
                                               export_params=True)
-        print("uploading text_encoder.onnx")
+        logger.info("uploading text_encoder.onnx")
         blob_service.create_blob_from_path('models', "text_encoder.onnx", os.path.abspath("text_encoder.onnx"))
-        print("done")
+        logger.info("done")
         
-        print("saving netg.onnx")
+        logger.info("saving netg.onnx")
         netg_out = torch.onnx._export(netG, (noise, sent_emb, words_embs, mask), "netg.onnx", export_params=True)
-        print("uploading netg.onnx")
+        logger.info("uploading netg.onnx")
         blob_service.create_blob_from_path('models', "netg.onnx", os.path.abspath("netg.onnx"))
-        print("done")
+        logger.info("done")
         return
     
     # G attention
@@ -240,5 +242,5 @@ if __name__ == "__main__":
     t0 = time.time()
     urls = generate(caption, wordtoix, ixtoword, text_encoder, netG, blob_service)
     t1 = time.time()
-    print(t1 - t0)
-    print(urls)
+    logger.info("Time taken %d" % (t1 - t0))
+    logger.info("URL %s" % urls)

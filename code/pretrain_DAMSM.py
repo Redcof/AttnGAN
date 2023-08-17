@@ -1,5 +1,16 @@
 from __future__ import print_function
 
+import mlflow
+from dotenv import load_dotenv
+from mlflow.types import Schema, TensorSpec
+
+from logger import logger
+from mlflow_utils import start_tracking, stop_tracking, log_model
+
+load_dotenv('.env')  # take environment variables from .env.
+
+from torch.utils.data import DataLoader
+
 from miscc.utils import mkdir_p
 from miscc.utils import build_super_images
 from miscc.losses import sent_loss, words_loss
@@ -28,10 +39,12 @@ from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
+from sixray_dataset import SixrayDataset
+
 dir_path = (os.path.abspath(os.path.join(os.path.realpath(__file__), './.')))
 sys.path.append(dir_path)
 
-UPDATE_INTERVAL = 200
+UPDATE_INTERVAL = 1
 
 
 def parse_args():
@@ -61,8 +74,7 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
         rnn_model.zero_grad()
         cnn_model.zero_grad()
         
-        imgs, captions, cap_lens, \
-            class_ids, keys = prepare_data(data)
+        imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
         
         # words_features: batch_size x nef x 17 x 17
         # sent_code: batch_size x nef
@@ -88,6 +100,21 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
         s_total_loss1 += s_loss1.data
         #
         loss.backward()
+        
+        mlflow.log_metrics(dict(
+            train_step_s_loss0=s_loss0.item(),
+            train_step_s_loss1=s_loss1.item(),
+            train_step_w_loss0=w_loss0.item(),
+            train_step_w_loss1=w_loss1.item(),
+            train_step_s_loss=(s_loss0 + s_loss1).item(),
+            train_step_w_loss=(w_loss0 + w_loss1).item(),
+        ), step=step)
+        logger.info('| Training epoch {:3d} | {:5d} '
+                    's_loss {:5.2f} {:5.2f} | '
+                    'w_loss {:5.2f} {:5.2f}'
+                    .format(epoch, step, len(dataloader),
+                            s_loss0, s_loss1,
+                            w_loss0, w_loss1))
         #
         # `clip_grad_norm` helps prevent
         # the exploding gradient problem in RNNs / LSTMs.
@@ -105,18 +132,18 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
             w_cur_loss1 = w_total_loss1.item() / UPDATE_INTERVAL
             
             elapsed = time.time() - start_time
-            print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
-                  's_loss {:5.2f} {:5.2f} | '
-                  'w_loss {:5.2f} {:5.2f}'
-                  .format(epoch, step, len(dataloader),
-                          elapsed * 1000. / UPDATE_INTERVAL,
-                          s_cur_loss0, s_cur_loss1,
-                          w_cur_loss0, w_cur_loss1))
+            logger.info('|Training epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
+                        's_loss {:5.2f} {:5.2f} | '
+                        'w_loss {:5.2f} {:5.2f}'
+                        .format(epoch, step, len(dataloader),
+                                elapsed * 1000. / UPDATE_INTERVAL,
+                                s_cur_loss0, s_cur_loss1,
+                                w_cur_loss0, w_cur_loss1))
             s_total_loss0 = 0
             s_total_loss1 = 0
             w_total_loss0 = 0
             w_total_loss1 = 0
-            start_time = time.time()
+            
             # attention Maps
             img_set, _ = build_super_images(imgs[-1].cpu(), captions,
                                             ixtoword, attn_maps, att_sze)
@@ -124,6 +151,16 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
                 im = Image.fromarray(img_set)
                 fullpath = '%s/attention_maps%d.png' % (image_dir, step)
                 im.save(fullpath)
+                mlflow.log_artifact(fullpath, "output/images")
+            start_time = time.time()
+    mlflow.log_metrics(dict(
+        train_epoch_s_loss0=s_loss0.item(),
+        train_epoch_s_loss1=s_loss1.item(),
+        train_epoch_w_loss0=w_loss0.item(),
+        train_epoch_w_loss1=w_loss1.item(),
+        train_epoch_s_loss=(s_loss0 + s_loss1).item(),
+        train_epoch_w_loss=(w_loss0 + w_loss1).item(),
+    ), step=epoch)
     return count
 
 
@@ -150,9 +187,23 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size):
         s_loss0, s_loss1 = sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
         s_total_loss += (s_loss0 + s_loss1).data
         
+        logger.info('| Evaluating epoch {:3d} | {:5d} '
+                    's_loss {:5.2f} {:5.2f} | '
+                    'w_loss {:5.2f} {:5.2f}'
+                    .format(epoch, step, len(dataloader),
+                            s_loss0, s_loss1,
+                            w_loss0, w_loss1))
         if step == 50:
             break
     
+    mlflow.log_metrics(dict(
+        test_epoch_s_loss0=s_loss0.item(),
+        test_epoch_s_loss1=s_loss1.item(),
+        test_epoch_w_loss0=w_loss0.item(),
+        test_epoch_w_loss1=w_loss1.item(),
+        test_epoch_s_loss=(s_loss0 + s_loss1).item(),
+        test_epoch_w_loss=(w_loss0 + w_loss1).item(),
+    ), step=epoch)
     s_cur_loss = s_total_loss.item() / step
     w_cur_loss = w_total_loss.item() / step
     
@@ -168,18 +219,18 @@ def build_models():
     if cfg.TRAIN.NET_E != '':
         state_dict = torch.load(cfg.TRAIN.NET_E)
         text_encoder.load_state_dict(state_dict)
-        print('Load ', cfg.TRAIN.NET_E)
+        logger.info('Load %s' % cfg.TRAIN.NET_E)
         #
         name = cfg.TRAIN.NET_E.replace('text_encoder', 'image_encoder')
         state_dict = torch.load(name)
         image_encoder.load_state_dict(state_dict)
-        print('Load ', name)
+        logger.info('Load %s' % name)
         
         istart = cfg.TRAIN.NET_E.rfind('_') + 8
         iend = cfg.TRAIN.NET_E.rfind('.')
         start_epoch = cfg.TRAIN.NET_E[istart:iend]
         start_epoch = int(start_epoch) + 1
-        print('start_epoch', start_epoch)
+        logger.info('start_epoch=%d' % start_epoch)
     if cfg.CUDA:
         text_encoder = text_encoder.cuda()
         image_encoder = image_encoder.cuda()
@@ -188,7 +239,21 @@ def build_models():
     return text_encoder, image_encoder, labels, start_epoch
 
 
+def except_hook(cls, exception, traceback):
+    """Give us back the original exception hook that may have changed"""
+    from logger import logger
+    
+    logger.exception(cls)
+    logger.exception(exception)
+    logger.exception(traceback)
+
+
 if __name__ == "__main__":
+    # Set logging levels
+    import logging
+    
+    logger.setLevel(logging.DEBUG)  # logger
+    sys.excepthook = except_hook
     args = parse_args()
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
@@ -200,13 +265,12 @@ if __name__ == "__main__":
     
     if args.data_dir != '':
         cfg.DATA_DIR = args.data_dir
-    print('Using config:')
-    pprint.pprint(cfg)
+    logger.info('Using config:%s' % cfg)
     
     if not cfg.TRAIN.FLAG:
         args.manualSeed = 100
     elif args.manualSeed is None:
-        args.manualSeed = random.randint(1, 10000)
+        args.manualSeed = 100
     random.seed(args.manualSeed)
     np.random.seed(args.manualSeed)
     torch.manual_seed(args.manualSeed)
@@ -216,8 +280,8 @@ if __name__ == "__main__":
     ##########################################################################
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = 'output/DAMSM_%s_%s_%s' % \
-                 (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
+    output_dir = 'output/DAMSM_%s_%s_%s' % (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
+    cfg.OUTPUT_DIR = output_dir
     
     model_dir = os.path.join(output_dir, 'Model')
     image_dir = os.path.join(output_dir, 'Image')
@@ -230,24 +294,43 @@ if __name__ == "__main__":
     # Get data loader ##################################################
     imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM - 1))
     batch_size = cfg.TRAIN.BATCH_SIZE
-    image_transform = transforms.Compose([
-        transforms.Resize(int(imsize * 76 / 64)),
-        transforms.RandomCrop(imsize),
-        transforms.RandomHorizontalFlip()])
-    dataset = TextDataset(cfg.DATA_DIR, 'train',
-                          base_size=cfg.TREE.BASE_SIZE,
-                          transform=image_transform)
-    
-    print(dataset.n_words, dataset.embeddings_num)
-    assert dataset
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, drop_last=True,
-                                             shuffle=True, num_workers=int(cfg.WORKERS))
-    
-    # # validation data #
-    dataset_val = TextDataset(cfg.DATA_DIR, 'test',
+    if cfg.DATASET_NAME == "birds":
+        image_transform = transforms.Compose([
+            transforms.Resize(int(imsize * 76 / 64)),
+            transforms.RandomCrop(imsize),
+            transforms.RandomHorizontalFlip()])
+        dataset = TextDataset(cfg.DATA_DIR, 'train',
                               base_size=cfg.TREE.BASE_SIZE,
                               transform=image_transform)
-    dataloader_val = torch.utils.data.DataLoader(
+        model_io_signature = None
+        assert dataset
+        
+        # # validation data #
+        dataset_val = TextDataset(cfg.DATA_DIR, 'test',
+                                  base_size=cfg.TREE.BASE_SIZE,
+                                  transform=image_transform)
+    elif cfg.DATASET_NAME == "sixray":
+        image_transform = transforms.Compose([
+            transforms.Resize(int(imsize * 76 / 64)),
+            transforms.RandomCrop(imsize),
+            transforms.RandomHorizontalFlip()])
+        dataset = SixrayDataset(cfg.DATA_DIR, 'train',
+                                base_size=cfg.TREE.BASE_SIZE,
+                                transform=image_transform)
+        model_io_signature = None
+        assert dataset
+        
+        # # validation data #
+        dataset_val = SixrayDataset(cfg.DATA_DIR, 'test',
+                                    base_size=cfg.TREE.BASE_SIZE,
+                                    transform=image_transform)
+    else:
+        logger.error("NotImplementedError(cfg.DATASET_NAME = '%s')" % cfg.DATASET_NAME)
+        raise NotImplementedError("cfg.DATASET_NAME = '%s'" % cfg.DATASET_NAME)
+    logger.info("dataset.n_words=%d, dataset.embeddings_num=%d" % (dataset.n_words, dataset.embeddings_num))
+    dataloader = DataLoader(dataset, batch_size=batch_size, drop_last=True,
+                            shuffle=True, num_workers=int(cfg.WORKERS))
+    dataloader_val = DataLoader(
         dataset_val, batch_size=batch_size, drop_last=True,
         shuffle=True, num_workers=int(cfg.WORKERS))
     
@@ -259,6 +342,7 @@ if __name__ == "__main__":
             para.append(v)
     # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
     # At any point you can hit Ctrl + C to break out of training early.
+    start_tracking()
     try:
         lr = cfg.TRAIN.ENCODER_LR
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
@@ -267,24 +351,27 @@ if __name__ == "__main__":
             count = train(dataloader, image_encoder, text_encoder,
                           batch_size, labels, optimizer, epoch,
                           dataset.ixtoword, image_dir)
-            print('-' * 89)
+            logger.info('-' * 89)
             if len(dataloader_val) > 0:
                 s_loss, w_loss = evaluate(dataloader_val, image_encoder,
                                           text_encoder, batch_size)
-                print('| end epoch {:3d} | valid loss '
-                      '{:5.2f} {:5.2f} | lr {:.5f}|'
-                      .format(epoch, s_loss, w_loss, lr))
-            print('-' * 89)
+                logger.info('| end epoch {:3d} | valid loss '
+                            '{:5.2f} {:5.2f} | lr {:.5f}|'
+                            .format(epoch, s_loss, w_loss, lr))
+            logger.info('-' * 89)
             if lr > cfg.TRAIN.ENCODER_LR / 10.:
                 lr *= 0.98
             
             if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
                 epoch == cfg.TRAIN.MAX_EPOCH):
-                torch.save(image_encoder.state_dict(),
-                           '%s/image_encoder%d.pth' % (model_dir, epoch))
-                torch.save(text_encoder.state_dict(),
-                           '%s/text_encoder%d.pth' % (model_dir, epoch))
-                print('Save G/Ds models.')
+                # torch.save(image_encoder.state_dict(),
+                #            '%s/image_encoder%d.pth' % (model_dir, epoch))
+                # torch.save(text_encoder.state_dict(),
+                #            '%s/text_encoder%d.pth' % (model_dir, epoch))
+                log_model("image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
+                log_model("text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
+                logger.info('Save G/Ds models.')
     except KeyboardInterrupt:
-        print('-' * 89)
-        print('Exiting from training early')
+        logger.info('-' * 89)
+        logger.info('Exiting from training early')
+    stop_tracking()

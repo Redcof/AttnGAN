@@ -1,102 +1,27 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from nltk.tokenize import RegexpTokenizer
+import csv
+import os
+import pickle
+import random
 from collections import defaultdict
 
-from logger import logger
-from miscc.config import cfg
-
-import torch
-import torch.utils.data as data
-from torch.autograd import Variable
-import torchvision.transforms as transforms
-
-import os
-import sys
+import mlflow
 import numpy as np
 import pandas as pd
-from PIL import Image
-import numpy.random as random
+from mlflow.types import Schema, TensorSpec
+from nltk import RegexpTokenizer
+from torch.utils.data import Dataset
+from torchvision import transforms
 
-if sys.version_info[0] == 2:
-    import cPickle as pickle
-else:
-    import pickle
-
-
-def prepare_data(data):
-    imgs, captions, captions_lens, class_ids, keys = data
-    
-    # sort data by the length in a decreasing order
-    sorted_cap_lens, sorted_cap_indices = torch.sort(captions_lens, 0, True)
-    
-    real_imgs = []
-    for i in range(len(imgs)):
-        imgs[i] = imgs[i][sorted_cap_indices]
-        if cfg.CUDA:
-            real_imgs.append(Variable(imgs[i]).cuda())
-        else:
-            real_imgs.append(Variable(imgs[i]))
-    
-    captions = captions[sorted_cap_indices].squeeze()
-    class_ids = class_ids[sorted_cap_indices].numpy()
-    # sent_indices = sent_indices[sorted_cap_indices]
-    keys = [keys[i] for i in sorted_cap_indices.numpy()]
-    # print('keys', type(keys), keys[-1])  # list
-    if cfg.CUDA:
-        captions = Variable(captions).cuda()
-        sorted_cap_lens = Variable(sorted_cap_lens).cuda()
-    else:
-        captions = Variable(captions)
-        sorted_cap_lens = Variable(sorted_cap_lens)
-    
-    return [real_imgs, captions, sorted_cap_lens,
-            class_ids, keys]
+from datasets import get_imgs
+from miscc.config import cfg
 
 
-def get_imgs(img_path, imsize, bbox=None,
-             transform=None, normalize=None):
-    img = Image.open(img_path).convert('RGB')
-    width, height = img.size
-    if bbox is not None:
-        r = int(np.maximum(bbox[2], bbox[3]) * 0.75)
-        center_x = int((2 * bbox[0] + bbox[2]) / 2)
-        center_y = int((2 * bbox[1] + bbox[3]) / 2)
-        y1 = np.maximum(0, center_y - r)
-        y2 = np.minimum(height, center_y + r)
-        x1 = np.maximum(0, center_x - r)
-        x2 = np.minimum(width, center_x + r)
-        img = img.crop([x1, y1, x2, y2])
-    
-    if transform is not None:
-        img = transform(img)
-    
-    ret = []
-    if cfg.GAN.B_DCGAN:
-        ret = [normalize(img)]
-    else:
-        for i in range(cfg.TREE.BRANCH_NUM):
-            # print(imsize[i])
-            if i < (cfg.TREE.BRANCH_NUM - 1):
-                re_img = transforms.Resize(imsize[i])(img)
-            else:
-                re_img = img
-            ret.append(normalize(re_img))
-    
-    return ret
-
-
-class TextDataset(data.Dataset):
-    def __init__(self, data_dir, split='train',
-                 base_size=64,
-                 transform=None, target_transform=None):
+class SixrayDataset(Dataset):
+    def __init__(self, data_dir, split='train', base_size=64, transform=None, target_transform=None):
         self.transform = transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+            transforms.Normalize(mean=0.5, std=0.5)])
         self.target_transform = target_transform
         self.embeddings_num = cfg.TEXT.CAPTIONS_PER_IMAGE
         
@@ -107,14 +32,10 @@ class TextDataset(data.Dataset):
         
         self.data = []
         self.data_dir = data_dir
-        if data_dir.find('birds') != -1:
-            self.bbox = self.load_bbox()
-        else:
-            self.bbox = None
+        
         split_dir = os.path.join(data_dir, split)
         
-        self.filenames, self.captions, self.ixtoword, \
-            self.wordtoix, self.n_words = self.load_text_data(data_dir, split)
+        self.filenames, self.captions, self.ixtoword, self.wordtoix, self.n_words = self.load_text_data(data_dir, split)
         
         self.class_id = self.load_class_id(split_dir, len(self.filenames))
         self.number_example = len(self.filenames)
@@ -129,7 +50,7 @@ class TextDataset(data.Dataset):
         filepath = os.path.join(data_dir, 'CUB_200_2011/images.txt')
         df_filenames = pd.read_csv(filepath, delim_whitespace=True, header=None)
         filenames = df_filenames[1].tolist()
-        logger.info('Total filenames: %d, %s' % (len(filenames), filenames[0]))
+        print('Total filenames: ', len(filenames), filenames[0])
         #
         filename_bbox = {img_file[:-4]: [] for img_file in filenames}
         numImgs = len(filenames)
@@ -145,9 +66,9 @@ class TextDataset(data.Dataset):
     def load_captions(self, data_dir, filenames):
         all_captions = []
         for i in range(len(filenames)):
-            cap_path = '%s/text/%s.txt' % (data_dir, filenames[i])
-            with open(cap_path, "r", encoding="utf8") as f:
-                captions = f.read().split('\n')
+            cap_path = '%s/captions/%s.txt' % (data_dir, filenames[i])
+            with open(cap_path, "r") as f:
+                captions = f.read().decode('utf8').split('\n')
                 cnt = 0
                 for cap in captions:
                     if len(cap) == 0:
@@ -159,7 +80,7 @@ class TextDataset(data.Dataset):
                     tokens = tokenizer.tokenize(cap.lower())
                     # print('tokens', tokens)
                     if len(tokens) == 0:
-                        logger.info('cap %s' % cap)
+                        print('cap', cap)
                         continue
                     
                     tokens_new = []
@@ -172,12 +93,13 @@ class TextDataset(data.Dataset):
                     if cnt == self.embeddings_num:
                         break
                 if cnt < self.embeddings_num:
-                    logger.info('ERROR: the captions for %s less than %d' % (filenames[i], cnt))
+                    print('ERROR: the captions for %s less than %d'
+                          % (filenames[i], cnt))
         return all_captions
     
     def build_dictionary(self, train_captions, test_captions):
         word_counts = defaultdict(float)
-        captions = train_captions + test_captions
+        captions = train_captions
         for sent in captions:
             for word in sent:
                 word_counts[word] += 1
@@ -193,7 +115,7 @@ class TextDataset(data.Dataset):
             wordtoix[w] = ix
             ixtoword[ix] = w
             ix += 1
-        # simple vocabulary-based positional encoding
+        
         train_captions_new = []
         for t in train_captions:
             rev = []
@@ -202,7 +124,7 @@ class TextDataset(data.Dataset):
                     rev.append(wordtoix[w])
             # rev.append(0)  # do not need '<end>' token
             train_captions_new.append(rev)
-        # simple vocabulary-based positional encoding
+        
         test_captions_new = []
         for t in test_captions:
             rev = []
@@ -216,19 +138,20 @@ class TextDataset(data.Dataset):
                 ixtoword, wordtoix, len(ixtoword)]
     
     def load_text_data(self, data_dir, split):
-        filepath = os.path.join(data_dir, 'captions.pickle')
+        filepath = os.path.join(data_dir, 'captions_.pickle')
         train_names = self.load_filenames(data_dir, 'train')
         test_names = self.load_filenames(data_dir, 'test')
         if not os.path.isfile(filepath):
             train_captions = self.load_captions(data_dir, train_names)
             test_captions = self.load_captions(data_dir, test_names)
             
-            train_captions, test_captions, ixtoword, wordtoix, n_words = self.build_dictionary(train_captions,
-                                                                                               test_captions)
+            train_captions, test_captions, ixtoword, wordtoix, n_words = self.build_dictionary(
+                train_captions, test_captions
+            )
             with open(filepath, 'wb') as f:
                 pickle.dump([train_captions, test_captions,
                              ixtoword, wordtoix], f, protocol=2)
-                logger.info('Save to: %s'% filepath)
+                print('Save to: ', filepath)
         else:
             with open(filepath, 'rb') as f:
                 x = pickle.load(f)
@@ -236,7 +159,7 @@ class TextDataset(data.Dataset):
                 ixtoword, wordtoix = x[2], x[3]
                 del x
                 n_words = len(ixtoword)
-                logger.info('Load from: %s'% filepath)
+                print('Load from: ', filepath)
         if split == 'train':
             # a list of list: each list contains
             # the indices of words in a sentence
@@ -247,29 +170,24 @@ class TextDataset(data.Dataset):
             filenames = test_names
         return filenames, captions, ixtoword, wordtoix, n_words
     
-    def load_class_id(self, data_dir, total_num):
-        if os.path.isfile(data_dir + '/class_info.pickle'):
-            with open(data_dir + '/class_info.pickle', 'rb') as f:
-                class_id = pickle.load(f, encoding="bytes")
-        else:
-            class_id = np.arange(total_num)
+    def load_class_id(self, data_dir, classes):
+        if os.path.isfile(data_dir + '/labels.csv'):
+            with open(data_dir + '/labels.csv', 'r') as f:
+                reader = csv.reader(f, delimiter=",")
+                class_id = {row[0]: classes.index(row[1].strip()) for row in reader if row[1].strip() in classes}
         return class_id
     
     def load_filenames(self, data_dir, split):
-        filepath = '%s/%s/filenames.pickle' % (data_dir, split)
-        if os.path.isfile(filepath):
-            with open(filepath, 'rb') as f:
-                filenames = pickle.load(f)
-            logger.info('Load filenames from: %s (%d)' % (filepath, len(filenames)))
-        else:
-            filenames = []
+        caption_dir = os.path.join(data_dir, split, "JPEGImages")
+        filenames = [cap_file.split(".")[0]
+                     for cap_file in os.listdir(caption_dir) if cap_file.endswith('.jpg')]
         return filenames
     
     def get_caption(self, sent_ix):
         # a list of indices for a sentence
         sent_caption = np.asarray(self.captions[sent_ix]).astype('int64')
         if (sent_caption == 0).sum() > 0:
-            logger.info('ERROR: do not need END (0) token', sent_caption)
+            print('ERROR: do not need END (0) token', sent_caption)
         num_words = len(sent_caption)
         # pad with 0s (i.e., '<end>')
         x = np.zeros((cfg.TEXT.WORDS_NUM, 1), dtype='int64')
@@ -287,24 +205,18 @@ class TextDataset(data.Dataset):
     
     def __getitem__(self, index):
         #
-        key = self.filenames[index]
-        cls_id = self.class_id[index]
+        filename_only = self.filenames[index]
+        cls_id = self.class_id["%s.jpg" % filename_only]
+        data_dir = self.data_dir
         #
-        if self.bbox is not None:
-            bbox = self.bbox[key]
-            data_dir = '%s/CUB_200_2011' % self.data_dir
-        else:
-            bbox = None
-            data_dir = self.data_dir
-        #
-        img_name = '%s/images/%s.jpg' % (data_dir, key)
+        img_name = '%s/JPEGImages/%s.jpg' % (data_dir, filename_only)
         imgs = get_imgs(img_name, self.imsize,
-                        bbox, self.transform, normalize=self.norm)
+                        None, self.transform, normalize=self.norm)
         # random select a sentence
         sent_ix = random.randint(0, self.embeddings_num)
         new_sent_ix = index * self.embeddings_num + sent_ix
         caps, cap_len = self.get_caption(new_sent_ix)
-        return imgs, caps, cap_len, cls_id, key
+        return imgs, caps, cap_len, cls_id, filename_only
     
     def __len__(self):
         return len(self.filenames)

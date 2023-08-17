@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 from copy import deepcopy
 import skimage.transform
 
+from logger import logger
 from miscc.config import cfg
 
 # For visualization ################################################
@@ -154,7 +155,7 @@ def build_super_images(real_imgs, captions, ixtoword,
         row_merge = np.concatenate(row_merge, 1)
         txt = text_map[i * FONT_MAX: (i + 1) * FONT_MAX]
         if txt.shape[1] != row.shape[1]:
-            print('txt', txt.shape, 'row', row.shape)
+            logger.info('txt %s row %s' % (txt.shape, row.shape))
             bUpdate = 0
             break
         row = np.concatenate([txt, row, row_merge], 0)

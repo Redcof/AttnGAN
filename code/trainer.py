@@ -9,6 +9,7 @@ import torch.backends.cudnn as cudnn
 
 from PIL import Image
 
+from logger import logger
 from miscc.config import cfg
 from miscc.utils import mkdir_p
 from miscc.utils import build_super_images, build_super_images2
@@ -236,7 +237,7 @@ class condGANTrainer(object):
                 ######################################################
                 # (1) Prepare training data and Compute text embeddings
                 ######################################################
-                data = data_iter.next()
+                data = next(data_iter)
                 imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
                 
                 hidden = text_encoder.init_hidden(batch_size)
@@ -292,7 +293,7 @@ class condGANTrainer(object):
                     avg_p.mul_(0.999).add_(0.001, p.data)
                 
                 if gen_iterations % 100 == 0:
-                    print(D_logs + '\n' + G_logs)
+                    logger.info("%s"%D_logs + '\n' + G_logs)
                 # save images
                 if gen_iterations % 1000 == 0:
                     backup_para = copy_G_params(netG)
@@ -308,11 +309,11 @@ class condGANTrainer(object):
                     #                       epoch, name='current')
             end_t = time.time()
             
-            print('''[%d/%d][%d]
+            logger.info('''[%d/%d][%d]
                   Loss_D: %.2f Loss_G: %.2f Time: %.2fs'''
-                  % (epoch, self.max_epoch, self.num_batches,
-                     errD_total.data[0], errG_total.data[0],
-                     end_t - start_t))
+                        % (epoch, self.max_epoch, self.num_batches,
+                           errD_total.data[0], errG_total.data[0],
+                           end_t - start_t))
             
             if epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:  # and epoch != 0:
                 self.save_model(netG, avg_param_G, netsD, epoch)
@@ -326,7 +327,7 @@ class condGANTrainer(object):
                     (save_dir, split_dir, filenames[i])
             folder = s_tmp[:s_tmp.rfind('/')]
             if not os.path.isdir(folder):
-                print('Make a new folder: ', folder)
+                logger.info('Make a new folder: %s' % folder)
                 mkdir_p(folder)
             
             fullpath = '%s_%d.jpg' % (s_tmp, sentenceID)
@@ -340,7 +341,7 @@ class condGANTrainer(object):
     
     def sampling(self, split_dir):
         if cfg.TRAIN.NET_G == '':
-            print('Error: the path for morels is not found!')
+            logger.info('Error: the path for morels is not found!')
         else:
             if split_dir == 'test':
                 split_dir = 'valid'
@@ -356,7 +357,7 @@ class condGANTrainer(object):
             text_encoder = RNN_ENCODER(self.n_words, nhidden=cfg.TEXT.EMBEDDING_DIM)
             state_dict = torch.load(cfg.TRAIN.NET_E, map_location=lambda storage, loc: storage)
             text_encoder.load_state_dict(state_dict)
-            print('Load text encoder from:', cfg.TRAIN.NET_E)
+            logger.info('Load text encoder from: %s' % cfg.TRAIN.NET_E)
             text_encoder = text_encoder.cuda()
             text_encoder.eval()
             
@@ -369,7 +370,7 @@ class condGANTrainer(object):
             state_dict = torch.load(model_dir, map_location=lambda storage, loc: storage)
             # state_dict = torch.load(cfg.TRAIN.NET_G)
             netG.load_state_dict(state_dict)
-            print('Load G from: ', model_dir)
+            logger.info('Load G from: %s' % model_dir)
             
             # the path to save generated images
             s_tmp = model_dir[:model_dir.rfind('.pth')]
@@ -382,7 +383,7 @@ class condGANTrainer(object):
                 for step, data in enumerate(self.data_loader, 0):
                     cnt += batch_size
                     if step % 100 == 0:
-                        print('step: ', step)
+                        logger.info('step: %d' % step)
                     # if step > 50:
                     #     break
                     
@@ -407,7 +408,7 @@ class condGANTrainer(object):
                         s_tmp = '%s/single/%s' % (save_dir, keys[j])
                         folder = s_tmp[:s_tmp.rfind('/')]
                         if not os.path.isdir(folder):
-                            print('Make a new folder: ', folder)
+                            logger.info('Make a new folder: %s' % folder)
                             mkdir_p(folder)
                         k = -1
                         # for k in range(len(fake_imgs)):
@@ -422,13 +423,13 @@ class condGANTrainer(object):
     
     def gen_example(self, data_dic):
         if cfg.TRAIN.NET_G == '':
-            print('Error: the path for morels is not found!')
+            logger.info('Error: the path for morels is not found!')
         else:
             # Build and load the generator
             text_encoder = RNN_ENCODER(self.n_words, nhidden=cfg.TEXT.EMBEDDING_DIM)
             state_dict = torch.load(cfg.TRAIN.NET_E, map_location=lambda storage, loc: storage)
             text_encoder.load_state_dict(state_dict)
-            print('Load text encoder from:', cfg.TRAIN.NET_E)
+            logger.info('Load text encoder from:' % cfg.TRAIN.NET_E)
             text_encoder = text_encoder.cuda()
             text_encoder.eval()
             
@@ -441,7 +442,7 @@ class condGANTrainer(object):
             model_dir = cfg.TRAIN.NET_G
             state_dict = torch.load(model_dir, map_location=lambda storage, loc: storage)
             netG.load_state_dict(state_dict)
-            print('Load G from: ', model_dir)
+            logger.info('Load G from: %s' % model_dir)
             netG.cuda()
             netG.eval()
             for key in data_dic:
