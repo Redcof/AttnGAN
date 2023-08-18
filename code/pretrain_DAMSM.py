@@ -373,7 +373,8 @@ if __name__ == "__main__":
                 log_model("image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
                 log_model("text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
                 logger.info('Save G/Ds models.')
+        stop_tracking()
     except KeyboardInterrupt:
         logger.info('-' * 89)
         logger.info('Exiting from training early')
-    stop_tracking()
+        stop_tracking("Killed by user")
