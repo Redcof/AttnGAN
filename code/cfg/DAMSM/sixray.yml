@@ -14,7 +14,7 @@ TREE:
 TRAIN:
   FLAG: True
   NET_E: ''
-  BATCH_SIZE: 10
+  BATCH_SIZE: 10 # total 2361 images, with batch-size (8, 10,  20, 40, 59) remainder is 1
   MAX_EPOCH: 2
   SNAPSHOT_INTERVAL: 1 # epoch
   ARTIFACT_INTERVAL_GLOBAL_STEP: 10 # global step
