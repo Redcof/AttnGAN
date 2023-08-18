@@ -245,7 +245,7 @@ def except_hook(cls, exception, traceback):
     
     logger.exception(cls)
     logger.exception(exception)
-    print(traceback)
+    traceback.print_exc()
 
 
 if __name__ == "__main__":
@@ -328,10 +328,10 @@ if __name__ == "__main__":
         logger.error("NotImplementedError(cfg.DATASET_NAME = '%s')" % cfg.DATASET_NAME)
         raise NotImplementedError("cfg.DATASET_NAME = '%s'" % cfg.DATASET_NAME)
     logger.info("dataset.n_words=%d, dataset.embeddings_num=%d" % (dataset.n_words, dataset.embeddings_num))
-    dataloader = DataLoader(dataset, batch_size=batch_size, drop_last=True,
+    dataloader = DataLoader(dataset, batch_size=batch_size, drop_last=False,
                             shuffle=True, num_workers=int(cfg.WORKERS))
     dataloader_val = DataLoader(
-        dataset_val, batch_size=batch_size, drop_last=True,
+        dataset_val, batch_size=batch_size, drop_last=False,
         shuffle=True, num_workers=int(cfg.WORKERS))
     
     # Train ##############################################################
