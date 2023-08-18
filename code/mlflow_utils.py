@@ -27,10 +27,10 @@ def start_tracking():
 
 def stop_tracking():
     # save logfile
-    mlflow.log_artifact(cfg.log_file, "output/log")
+    # mlflow.log_artifact(cfg.log_file, "output/log")
     run = mlflow.active_run()
     mlflow.end_run()
-    logger.info("Active mlflow run_name:{} run_id: {} started...".format(run.info.run_name, run.info.run_id))
+    logger.info("Active mlflow run_name:{} run_id: {} stopped".format(run.info.run_name, run.info.run_id))
 
 
 def prepare_for_mlflow(**kwargs):

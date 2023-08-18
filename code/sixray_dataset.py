@@ -33,11 +33,11 @@ class SixrayDataset(Dataset):
         self.data = []
         self.data_dir = data_dir
         
-        split_dir = os.path.join(data_dir, split)
+        self.split_dir = os.path.join(data_dir, split)
         
         self.filenames, self.captions, self.ixtoword, self.wordtoix, self.n_words = self.load_text_data(data_dir, split)
         
-        self.class_id = self.load_class_id(split_dir, len(self.filenames))
+        self.class_id = self.load_class_id(self.data_dir, ["gun", "knife", "gun-knife"])
         self.number_example = len(self.filenames)
     
     def load_bbox(self):
@@ -68,8 +68,11 @@ class SixrayDataset(Dataset):
         for i in range(len(filenames)):
             cap_path = '%s/%s/captions/%s.txt' % (data_dir, split, filenames[i])
             with open(cap_path, "r", encoding='utf8') as f:
-                captions = f.read().split('\n')
+                captions = [line for line in f.read().split('\n') if line.strip() != ""]
                 cnt = 0
+                if len(captions) < 5:
+                    # if number of captions are less than 5, copy the first caption
+                    captions.append(captions[0])
                 for cap in captions:
                     if len(cap) == 0:
                         continue
@@ -137,7 +140,7 @@ class SixrayDataset(Dataset):
                 ixtoword, wordtoix, len(ixtoword)]
     
     def load_text_data(self, data_dir, split):
-        filepath = os.path.join(data_dir, 'captions_.pickle')
+        filepath = os.path.join(data_dir, 'captions.pickle')
         train_names = self.load_filenames(data_dir, 'train')
         test_names = self.load_filenames(data_dir, 'test')
         if not os.path.isfile(filepath):
@@ -171,9 +174,11 @@ class SixrayDataset(Dataset):
     
     def load_class_id(self, data_dir, classes):
         if os.path.isfile(data_dir + '/labels.csv'):
+            # a csv file contains filename and class-name
             with open(data_dir + '/labels.csv', 'r') as f:
                 reader = csv.reader(f, delimiter=",")
-                class_id = {row[0]: classes.index(row[1].strip()) for row in reader if row[1].strip() in classes}
+                class_id = {row[0].split(".")[0]: classes.index(row[1].strip()) for row in reader if
+                            row[1].strip() in classes}
         return class_id
     
     def load_filenames(self, data_dir, split):
@@ -205,8 +210,8 @@ class SixrayDataset(Dataset):
     def __getitem__(self, index):
         #
         filename_only = self.filenames[index]
-        cls_id = self.class_id["%s.jpg" % filename_only]
-        data_dir = self.data_dir
+        cls_id = self.class_id[filename_only]
+        data_dir = self.split_dir
         #
         img_name = '%s/JPEGImages/%s.jpg' % (data_dir, filename_only)
         imgs = get_imgs(img_name, self.imsize,
