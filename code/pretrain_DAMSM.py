@@ -245,7 +245,8 @@ def except_hook(cls, exception, traceback):
     
     logger.exception(cls)
     logger.exception(exception)
-    traceback.print_exc()
+    mlflow.log_param("Exception", "%s, %s, %s" % (cls, exception, traceback))
+    stop_tracking("ended with exception")
 
 
 if __name__ == "__main__":
