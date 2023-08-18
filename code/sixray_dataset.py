@@ -63,12 +63,12 @@ class SixrayDataset(Dataset):
         #
         return filename_bbox
     
-    def load_captions(self, data_dir, filenames):
+    def load_captions(self, data_dir, split, filenames):
         all_captions = []
         for i in range(len(filenames)):
-            cap_path = '%s/captions/%s.txt' % (data_dir, filenames[i])
-            with open(cap_path, "r") as f:
-                captions = f.read().decode('utf8').split('\n')
+            cap_path = '%s/%s/captions/%s.txt' % (data_dir, split, filenames[i])
+            with open(cap_path, "r", encoding='utf8') as f:
+                captions = f.read().split('\n')
                 cnt = 0
                 for cap in captions:
                     if len(cap) == 0:
@@ -93,8 +93,7 @@ class SixrayDataset(Dataset):
                     if cnt == self.embeddings_num:
                         break
                 if cnt < self.embeddings_num:
-                    print('ERROR: the captions for %s less than %d'
-                          % (filenames[i], cnt))
+                    print('ERROR: the captions for %s less than %d' % (filenames[i], cnt))
         return all_captions
     
     def build_dictionary(self, train_captions, test_captions):
@@ -142,8 +141,8 @@ class SixrayDataset(Dataset):
         train_names = self.load_filenames(data_dir, 'train')
         test_names = self.load_filenames(data_dir, 'test')
         if not os.path.isfile(filepath):
-            train_captions = self.load_captions(data_dir, train_names)
-            test_captions = self.load_captions(data_dir, test_names)
+            train_captions = self.load_captions(data_dir, 'train', train_names)
+            test_captions = self.load_captions(data_dir, 'test', test_names)
             
             train_captions, test_captions, ixtoword, wordtoix, n_words = self.build_dictionary(
                 train_captions, test_captions

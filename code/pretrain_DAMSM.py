@@ -44,7 +44,7 @@ from sixray_dataset import SixrayDataset
 dir_path = (os.path.abspath(os.path.join(os.path.realpath(__file__), './.')))
 sys.path.append(dir_path)
 
-UPDATE_INTERVAL = 1
+ARTIFACT_INTERVAL_GLOBAL_STEP = cfg.TRAIN.ARTIFACT_INTERVAL_GLOBAL_STEP
 
 
 def parse_args():
@@ -63,14 +63,18 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
           labels, optimizer, epoch, ixtoword, image_dir):
     cnn_model.train()
     rnn_model.train()
-    s_total_loss0 = 0
-    s_total_loss1 = 0
-    w_total_loss0 = 0
-    w_total_loss1 = 0
-    count = (epoch + 1) * len(dataloader)
+    s_loss0 = 0
+    s_loss1 = 0
+    w_loss0 = 0
+    w_loss1 = 0
+    s_total_loss = 0
+    w_total_loss = 0
+    global_step = (epoch + 1) * len(dataloader)
     start_time = time.time()
-    for step, data in enumerate(dataloader, 0):
-        # print('step', step)
+    batch_id = 0
+    for batch_id, data in enumerate(dataloader, 0):
+        global_step = epoch * len(dataloader) + batch_id
+        # print('batch_id', batch_id)
         rnn_model.zero_grad()
         cnn_model.zero_grad()
         
@@ -88,31 +92,33 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
         # sent_emb: batch_size x nef
         words_emb, sent_emb = rnn_model(captions, cap_lens, hidden)
         
+        # word loss
         w_loss0, w_loss1, attn_maps = words_loss(words_features, words_emb, labels,
                                                  cap_lens, class_ids, batch_size)
-        w_total_loss0 += w_loss0.data
-        w_total_loss1 += w_loss1.data
         loss = w_loss0 + w_loss1
+        w_total_loss += loss.data
         
+        # sentence loss
         s_loss0, s_loss1 = sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
         loss += s_loss0 + s_loss1
-        s_total_loss0 += s_loss0.data
-        s_total_loss1 += s_loss1.data
+        s_total_loss += loss.data
         #
         loss.backward()
-        
+        elapsed = time.time() - start_time
         mlflow.log_metrics(dict(
-            train_step_s_loss0=s_loss0.item(),
-            train_step_s_loss1=s_loss1.item(),
-            train_step_w_loss0=w_loss0.item(),
-            train_step_w_loss1=w_loss1.item(),
-            train_step_s_loss=(s_loss0 + s_loss1).item(),
-            train_step_w_loss=(w_loss0 + w_loss1).item(),
-        ), step=step)
-        logger.info('| Training epoch {:3d} | {:5d} '
+            train_batch_ms=elapsed,
+            train_batch_s_loss0=s_loss0.item(),
+            train_batch_s_loss1=s_loss1.item(),
+            train_batch_w_loss0=w_loss0.item(),
+            train_batch_w_loss1=w_loss1.item(),
+            train_batch_s_loss=(s_loss0 + s_loss1).item(),
+            train_batch_w_loss=(w_loss0 + w_loss1).item(),
+        ), step=batch_id)
+        logger.info('| Training epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} '
                     's_loss {:5.2f} {:5.2f} | '
                     'w_loss {:5.2f} {:5.2f}'
-                    .format(epoch, step, len(dataloader),
+                    .format(epoch, batch_id, len(dataloader),
+                            elapsed,
                             s_loss0, s_loss1,
                             w_loss0, w_loss1))
         #
@@ -122,56 +128,42 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
                                       cfg.TRAIN.RNN_GRAD_CLIP)
         optimizer.step()
         
-        if step % UPDATE_INTERVAL == 0:
-            count = epoch * len(dataloader) + step
-            
-            s_cur_loss0 = s_total_loss0.item() / UPDATE_INTERVAL
-            s_cur_loss1 = s_total_loss1.item() / UPDATE_INTERVAL
-            
-            w_cur_loss0 = w_total_loss0.item() / UPDATE_INTERVAL
-            w_cur_loss1 = w_total_loss1.item() / UPDATE_INTERVAL
-            
-            elapsed = time.time() - start_time
-            logger.info('|Training epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
-                        's_loss {:5.2f} {:5.2f} | '
-                        'w_loss {:5.2f} {:5.2f}'
-                        .format(epoch, step, len(dataloader),
-                                elapsed * 1000. / UPDATE_INTERVAL,
-                                s_cur_loss0, s_cur_loss1,
-                                w_cur_loss0, w_cur_loss1))
-            s_total_loss0 = 0
-            s_total_loss1 = 0
-            w_total_loss0 = 0
-            w_total_loss1 = 0
-            
+        start_time = time.time()
+        if global_step % ARTIFACT_INTERVAL_GLOBAL_STEP == 0:
             # attention Maps
             img_set, _ = build_super_images(imgs[-1].cpu(), captions,
                                             ixtoword, attn_maps, att_sze)
             if img_set is not None:
                 im = Image.fromarray(img_set)
-                fullpath = '%s/attention_maps%d.png' % (image_dir, step)
+                fullpath = '%s/attention_maps_epoch_%d_batch_%d.png' % (image_dir, epoch, batch_id)
                 im.save(fullpath)
                 mlflow.log_artifact(fullpath, "output/images")
-            start_time = time.time()
+    s_cur_loss = s_total_loss.item() / (batch_id + 1)
+    w_cur_loss = w_total_loss.item() / (batch_id + 1)
     mlflow.log_metrics(dict(
         train_epoch_s_loss0=s_loss0.item(),
         train_epoch_s_loss1=s_loss1.item(),
         train_epoch_w_loss0=w_loss0.item(),
         train_epoch_w_loss1=w_loss1.item(),
-        train_epoch_s_loss=(s_loss0 + s_loss1).item(),
-        train_epoch_w_loss=(w_loss0 + w_loss1).item(),
+        train_epoch_s_loss=s_cur_loss,
+        train_epoch_w_loss=w_cur_loss,
     ), step=epoch)
-    return count
+    return global_step
 
 
 def evaluate(dataloader, cnn_model, rnn_model, batch_size):
     cnn_model.eval()
     rnn_model.eval()
+    s_loss0 = 0
+    s_loss1 = 0
+    w_loss0 = 0
+    w_loss1 = 0
     s_total_loss = 0
     w_total_loss = 0
-    for step, data in enumerate(dataloader, 0):
-        real_imgs, captions, cap_lens, \
-            class_ids, keys = prepare_data(data)
+    batch_id = 0
+    for batch_id, data in enumerate(dataloader, 0):
+        global_step = epoch * len(dataloader) + batch_id
+        real_imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
         
         words_features, sent_code = cnn_model(real_imgs[-1])
         # nef = words_features.size(1)
@@ -187,25 +179,33 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size):
         s_loss0, s_loss1 = sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
         s_total_loss += (s_loss0 + s_loss1).data
         
+        mlflow.log_metrics(dict(
+            test_batch_s_loss0=s_loss0.item(),
+            test_batch_s_loss1=s_loss1.item(),
+            test_batch_w_loss0=w_loss0.item(),
+            test_batch_w_loss1=w_loss1.item(),
+            test_batch_s_loss=(s_loss0 + s_loss1).item(),
+            test_batch_w_loss=(w_loss0 + w_loss1).item(),
+        ), step=global_step)
+        
         logger.info('| Evaluating epoch {:3d} | {:5d} '
                     's_loss {:5.2f} {:5.2f} | '
                     'w_loss {:5.2f} {:5.2f}'
-                    .format(epoch, step, len(dataloader),
+                    .format(epoch, batch_id, len(dataloader),
                             s_loss0, s_loss1,
                             w_loss0, w_loss1))
-        if step == 50:
-            break
+    
+    s_cur_loss = s_total_loss.item() / (batch_id + 1)
+    w_cur_loss = w_total_loss.item() / (batch_id + 1)
     
     mlflow.log_metrics(dict(
         test_epoch_s_loss0=s_loss0.item(),
         test_epoch_s_loss1=s_loss1.item(),
         test_epoch_w_loss0=w_loss0.item(),
         test_epoch_w_loss1=w_loss1.item(),
-        test_epoch_s_loss=(s_loss0 + s_loss1).item(),
-        test_epoch_w_loss=(w_loss0 + w_loss1).item(),
+        test_epoch_s_loss=s_cur_loss,
+        test_epoch_w_loss=w_cur_loss,
     ), step=epoch)
-    s_cur_loss = s_total_loss.item() / step
-    w_cur_loss = w_total_loss.item() / step
     
     return s_cur_loss, w_cur_loss
 
@@ -245,7 +245,7 @@ def except_hook(cls, exception, traceback):
     
     logger.exception(cls)
     logger.exception(exception)
-    logger.exception(traceback)
+    print(traceback)
 
 
 if __name__ == "__main__":

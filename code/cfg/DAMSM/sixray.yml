@@ -15,12 +15,13 @@ TRAIN:
   FLAG: True
   NET_E: ''
   BATCH_SIZE: 6
-  MAX_EPOCH: 600
-  SNAPSHOT_INTERVAL: 50
+  MAX_EPOCH: 10
+  SNAPSHOT_INTERVAL: 5 # epoch
+  ARTIFACT_INTERVAL_GLOBAL_STEP: 1 # global step
   ENCODER_LR: 0.002  # 0.0002best; 0.002good; scott: 0.0007 with 0.98decay
   RNN_GRAD_CLIP: 0.25
   SMOOTH:
-    GAMMA1: 4.0  # 1,2,5 good 4 best  10&100bad
+    GAMMA1: 4.0  # 1,2,5 good 4 best 10&100bad
     GAMMA2: 5.0
     GAMMA3: 10.0  # 10good 1&100bad
 
