@@ -5,3 +5,4 @@ code/miscc/*.pyc
 .DS_Store
 .idea/
 .env
+/log*.txt

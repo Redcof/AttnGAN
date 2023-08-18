@@ -1,9 +1,15 @@
+import datetime
 import os
 
+import dateutil.tz
 import mlflow
 
 from miscc.config import cfg
 from logger import logger
+
+now = datetime.datetime.now(dateutil.tz.tzlocal())
+timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
+log_file = "./log_%s.txt" % timestamp
 
 
 def start_tracking():
@@ -25,9 +31,11 @@ def start_tracking():
     logger.info("Active mlflow run_name:{} run_id: {} started...".format(run.info.run_name, run.info.run_id))
 
 
-def stop_tracking():
+def stop_tracking(exit_message="ended peacefully"):
+    global log_file
     # save logfile
-    # mlflow.log_artifact(cfg.log_file, "output/log")
+    mlflow.log_artifact(log_file, "output/log")
+    mlflow.log_param("exit_message", exit_message)
     run = mlflow.active_run()
     mlflow.end_run()
     logger.info("Active mlflow run_name:{} run_id: {} stopped".format(run.info.run_name, run.info.run_id))
