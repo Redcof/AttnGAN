@@ -4,8 +4,8 @@ import mlflow
 from dotenv import load_dotenv
 from mlflow.types import Schema, TensorSpec
 
-from logger import logger
-from mlflow_utils import start_tracking, stop_tracking, log_model
+from logger import logger, attach_file_to_logger
+from mlflow_utils import start_tracking, stop_tracking, log_model, log_file
 
 load_dotenv('.env')  # take environment variables from .env.
 
@@ -255,6 +255,7 @@ if __name__ == "__main__":
     
     logger.setLevel(logging.DEBUG)  # logger
     sys.excepthook = except_hook
+    attach_file_to_logger(log_file)
     args = parse_args()
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
