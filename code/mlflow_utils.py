@@ -3,6 +3,7 @@ import os
 
 import dateutil.tz
 import mlflow
+import torch
 
 from miscc.config import cfg
 from logger import logger
@@ -99,12 +100,18 @@ def save_image(epoch_idx, train_losses, train_performance_dict):
 
 
 def log_model(dir_name, model, model_io_signature):
+    logger.info("Saving local model: '%s'" % ("output/%s_%s" % (timestamp, dir_name)))
+    torch.save(model.state_dict(), "output/%s_%s" % (timestamp, dir_name))
     if model_io_signature is not None and cfg.framework == "pytorch":
-        logger.info("Logging eager-model to mlflow backend...")
-        mlflow.pytorch.log_model(
-            model,
-            "output/%s/model" % dir_name,
-            signature=model_io_signature,
-            pip_requirements="./requirements.txt",
-        )
-        logger.info("Done")
+        try:
+            logger.info("Logging eager-model to mlflow backend...'%s'" % ("output/%s/model" % dir_name))
+            mlflow.pytorch.log_model(
+                model,
+                "output/%s/model" % dir_name,
+                signature=model_io_signature,
+                pip_requirements="./requirements.txt",
+            )
+            logger.info("Done")
+        except Exception as e:
+            logger.exception(e)
+            ...

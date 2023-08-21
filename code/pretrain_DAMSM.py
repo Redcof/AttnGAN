@@ -345,6 +345,7 @@ if __name__ == "__main__":
     # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
     # At any point you can hit Ctrl + C to break out of training early.
     start_tracking()
+    epoch = start_epoch
     try:
         lr = cfg.TRAIN.ENCODER_LR
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
@@ -377,4 +378,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info('-' * 89)
         logger.info('Exiting from training early')
+        log_model("image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
+        log_model("text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
+        logger.info('Save G/Ds models.')
         stop_tracking("Killed by user")
