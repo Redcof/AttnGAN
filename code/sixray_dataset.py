@@ -213,7 +213,7 @@ class SixrayDataset(Dataset):
     def get_random_caption_idx(self, index):
         """Instead of a random index, sent each index one by one, circulate, and continue"""
         self.captions_idx[index] += 1
-        # sent_ix = random.randint(0, self.embeddings_num)
+        # sent_ix = random.randint(0, self.embeddings_num-1) # both values are inclusive
         sent_ix = self.captions_idx[index]
         if sent_ix == 4:
             self.captions_idx[index] = -1
