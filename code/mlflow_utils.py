@@ -108,13 +108,3 @@ def log_model(dir_name, model, model_io_signature):
             pip_requirements="./requirements.txt",
         )
         logger.info("Done")
-        logger.info("Logging script-model to mlflow backend...")
-        import torch
-        mlflow.pytorch.log_model(
-            torch.jit.script(model),
-            "output/%s/scripted" % dir_name,
-            signature=model_io_signature,
-            pip_requirements="./requirements.txt",
-        )
-        logger.info("Done")
-        # torch.onnx.export(self.net, x, "faster_rcnn.onnx", opset_version=11)

@@ -20,7 +20,7 @@ from mlflow_utils import stop_tracking
 
 class SixrayDataset(Dataset):
     def __init__(self, data_dir, split='train', base_size=64, transform=None, target_transform=None):
-        self.captions_idx = defaultdict(lambda: -1)
+        self.captions_idx = dict()
         self.transform = transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
@@ -156,7 +156,7 @@ class SixrayDataset(Dataset):
             with open(filepath, 'wb') as f:
                 pickle.dump([train_captions, test_captions,
                              ixtoword, wordtoix], f, protocol=2)
-                print('Save to: ', filepath)
+                logger.info('Save to: %s' % filepath)
         else:
             with open(filepath, 'rb') as f:
                 x = pickle.load(f)
@@ -164,7 +164,7 @@ class SixrayDataset(Dataset):
                 ixtoword, wordtoix = x[2], x[3]
                 del x
                 n_words = len(ixtoword)
-                print('Load from: ', filepath)
+                logger.info('Load from: %s' % filepath)
         if split == 'train':
             # a list of list: each list contains
             # the indices of words in a sentence
@@ -212,6 +212,8 @@ class SixrayDataset(Dataset):
     
     def get_random_caption_idx(self, index):
         """Instead of a random index, sent each index one by one, circulate, and continue"""
+        if index not in self.captions_idx.keys():
+            self.captions_idx[index] = -1
         self.captions_idx[index] += 1
         # sent_ix = random.randint(0, self.embeddings_num-1) # both values are inclusive
         sent_ix = self.captions_idx[index]
