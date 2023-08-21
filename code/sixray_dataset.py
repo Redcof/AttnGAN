@@ -13,7 +13,9 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 from datasets import get_imgs
+from logger import logger
 from miscc.config import cfg
+from mlflow_utils import stop_tracking
 
 
 class SixrayDataset(Dataset):
@@ -96,7 +98,7 @@ class SixrayDataset(Dataset):
                     if cnt == self.embeddings_num:
                         break
                 if cnt < self.embeddings_num:
-                    print('ERROR: the captions for %s less than %d' % (filenames[i], cnt))
+                    logger.info('ERROR: the captions for %s less than %d' % (filenames[i], cnt))
         return all_captions
     
     def build_dictionary(self, train_captions, test_captions):
@@ -191,7 +193,7 @@ class SixrayDataset(Dataset):
         # a list of indices for a sentence
         sent_caption = np.asarray(self.captions[sent_ix]).astype('int64')
         if (sent_caption == 0).sum() > 0:
-            print('ERROR: do not need END (0) token', sent_caption)
+            logger.info('ERROR: do not need END (0) token', sent_caption)
         num_words = len(sent_caption)
         # pad with 0s (i.e., '<end>')
         x = np.zeros((cfg.TEXT.WORDS_NUM, 1), dtype='int64')
@@ -219,7 +221,15 @@ class SixrayDataset(Dataset):
         # random select a sentence
         sent_ix = random.randint(0, self.embeddings_num)
         new_sent_ix = index * self.embeddings_num + sent_ix
-        caps, cap_len = self.get_caption(new_sent_ix)
+        try:
+            caps, cap_len = self.get_caption(new_sent_ix)
+        except IndexError as e:
+            logger.debug(
+                "INDEX=%d, SENT_IX=%d, IDX=%d, FILENAMES=%d, CAPTIONS:%d" %
+                (index, sent_ix, new_sent_ix, len(self.filenames), len(self.captions)))
+            logger.exception(e)
+            stop_tracking(exit_message=str(e))
+            raise e
         return imgs, caps, cap_len, cls_id, filename_only
     
     def __len__(self):
