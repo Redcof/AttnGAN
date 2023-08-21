@@ -1,5 +1,5 @@
-['remote "origin"']
+['remote "origin-http"']
     url = https://dagshub.com/Redcof/AttnGAN.dvc
-['remote "origin-s3"']
+['remote "origin"']
     url = s3://dvc
     endpointurl = https://dagshub.com/Redcof/AttnGAN.s3

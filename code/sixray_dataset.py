@@ -231,16 +231,7 @@ class SixrayDataset(Dataset):
                         None, self.transform, normalize=self.norm)
         # random select a sentence
         new_sent_ix = self.get_random_caption_idx(index)
-        sent_ix = self.captions_idx[index]
-        try:
-            caps, cap_len = self.get_caption(new_sent_ix)
-        except IndexError as e:
-            logger.debug(
-                "INDEX=%d, SENT_IX=%d, IDX=%d, FILENAMES=%d, CAPTIONS:%d" %
-                (index, sent_ix, new_sent_ix, len(self.filenames), len(self.captions)))
-            logger.exception(e)
-            stop_tracking(exit_message=str(e))
-            raise e
+        caps, cap_len = self.get_caption(new_sent_ix)
         return imgs, caps, cap_len, cls_id, filename_only
     
     def __len__(self):
