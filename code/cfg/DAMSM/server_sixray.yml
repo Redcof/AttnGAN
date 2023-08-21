@@ -1,5 +1,5 @@
 CONFIG_NAME: 'server_DAMSM'
-experiment_description: 'DAMSM pretraining with sixray - batch-size 64'
+experiment_description: 'DAMSM pretraining with sixray - AspectResize, no crop'
 DATASET_NAME: 'sixray'
 DATA_DIR: './data/sixray_2361'
 GPU_ID: 0

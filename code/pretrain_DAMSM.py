@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from mlflow.types import Schema, TensorSpec
 
 from logger import logger, attach_file_to_logger
-from mlflow_utils import start_tracking, stop_tracking, log_model, log_file
+from mlflow_utils import start_tracking, stop_tracking, log_model, log_file, AspectResize
 
 load_dotenv('.env')  # take environment variables from .env.
 
@@ -313,8 +313,8 @@ if __name__ == "__main__":
                                   transform=image_transform)
     elif cfg.DATASET_NAME == "sixray":
         image_transform = transforms.Compose([
-            transforms.Resize(int(imsize * 76 / 64)),
-            transforms.RandomCrop(imsize),
+            AspectResize(int(imsize * 76 / 64)),
+            # transforms.RandomCrop(imsize),
             transforms.RandomHorizontalFlip()])
         dataset = SixrayDataset(cfg.DATA_DIR, 'train',
                                 base_size=cfg.TREE.BASE_SIZE,
