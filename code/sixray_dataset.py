@@ -20,6 +20,7 @@ from mlflow_utils import stop_tracking
 
 class SixrayDataset(Dataset):
     def __init__(self, data_dir, split='train', base_size=64, transform=None, target_transform=None):
+        self.captions_idx = defaultdict(lambda: -1)
         self.transform = transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
@@ -209,6 +210,16 @@ class SixrayDataset(Dataset):
             x_len = cfg.TEXT.WORDS_NUM
         return x, x_len
     
+    def get_random_caption_idx(self, index):
+        """Instead of a random index, sent each index one by one, circulate, and continue"""
+        self.captions_idx[index] += 1
+        # sent_ix = random.randint(0, self.embeddings_num)
+        sent_ix = self.captions_idx[index]
+        if sent_ix == 4:
+            self.captions_idx[index] = -1
+        new_sent_ix = index * self.embeddings_num + sent_ix
+        return new_sent_ix
+    
     def __getitem__(self, index):
         #
         filename_only = self.filenames[index]
@@ -219,8 +230,8 @@ class SixrayDataset(Dataset):
         imgs = get_imgs(img_name, self.imsize,
                         None, self.transform, normalize=self.norm)
         # random select a sentence
-        sent_ix = random.randint(0, self.embeddings_num)
-        new_sent_ix = index * self.embeddings_num + sent_ix
+        new_sent_ix = self.get_random_caption_idx(index)
+        sent_ix = self.captions_idx[index]
         try:
             caps, cap_len = self.get_caption(new_sent_ix)
         except IndexError as e:
