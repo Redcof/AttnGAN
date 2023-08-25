@@ -12,12 +12,7 @@ python 2.7
 Pytorch
 
 In addition, please add the project folder to PYTHONPATH and `pip install` the following packages:
-- `python-dateutil`
-- `easydict`
-- `pandas`
-- `torchfile`
-- `nltk`
-- `scikit-image`
+- `pip install python-dateutil easydict pandas torchfile nltk scikit-image`
 
 
 
@@ -31,10 +26,12 @@ In addition, please add the project folder to PYTHONPATH and `pip install` the f
 
 **Training**
 - Pre-train DAMSM models:
+  - For sixray dataset: `python pretrain_DAMSM.py --cfg cfg/DAMSM/sixray.yml --gpu 0`
   - For bird dataset: `python pretrain_DAMSM.py --cfg cfg/DAMSM/bird.yml --gpu 0`
   - For coco dataset: `python pretrain_DAMSM.py --cfg cfg/DAMSM/coco.yml --gpu 1`
  
 - Train AttnGAN models:
+  - For sixray dataset: `python main.py --cfg cfg/sixray_attn2.yml --gpu 0`
   - For bird dataset: `python main.py --cfg cfg/bird_attn2.yml --gpu 2`
   - For coco dataset: `python main.py --cfg cfg/coco_attn2.yml --gpu 3`
 

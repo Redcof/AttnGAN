@@ -1,16 +1,23 @@
 import logging
 
 # create logger object
-logger = logging.getLogger("attgan")
-
+logger = None
 # create a formatter object
 Log_Format = "%(asctime)s %(name)s [%(levelname)s]: %(message)s"
 formatter = logging.Formatter(fmt=Log_Format)
 
-# Add custom handler with format to this logger
-handler = logging.StreamHandler()
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+
+def init_logger(name="attgan", log_file=None):
+    global logger
+    logger = logging.getLogger(name)
+    
+    # Add custom handler with format to this logger
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    if log_file:
+        attach_file_to_logger(log_file)
 
 
 def attach_file_to_logger(log_file):

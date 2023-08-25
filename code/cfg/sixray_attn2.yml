@@ -1,5 +1,5 @@
-CONFIG_NAME: 'birds_attn2'
-experiment_description: 'mlflow testing form local machine'
+CONFIG_NAME: 'attn2'
+
 DATASET_NAME: 'birds'
 DATA_DIR: 'data/birds'
 GPU_ID: 0

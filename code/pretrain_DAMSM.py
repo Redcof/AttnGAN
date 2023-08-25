@@ -1,11 +1,12 @@
 from __future__ import print_function
 
+import logging
+
 import mlflow
 from dotenv import load_dotenv
-from mlflow.types import Schema, TensorSpec
 
-from logger import logger, attach_file_to_logger
-from mlflow_utils import start_tracking, stop_tracking, log_model, log_file, AspectResize
+from logger import logger, init_logger
+from mlflow_utils import start_tracking, stop_tracking, log_model, log_file, AspectResize, except_hook
 
 load_dotenv('.env')  # take environment variables from .env.
 
@@ -33,7 +34,6 @@ import numpy as np
 from PIL import Image
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
@@ -239,23 +239,12 @@ def build_models():
     return text_encoder, image_encoder, labels, start_epoch
 
 
-def except_hook(cls, exception, traceback):
-    """Give us back the original exception hook that may have changed"""
-    from logger import logger
-    
-    logger.exception(cls)
-    logger.exception(exception)
-    mlflow.log_param("Exception", "%s, %s, %s" % (cls, exception, traceback))
-    stop_tracking("ended with exception")
-
-
 if __name__ == "__main__":
     # Set logging levels
-    import logging
-    
-    logger.setLevel(logging.DEBUG)  # logger
     sys.excepthook = except_hook
-    attach_file_to_logger(log_file)
+    
+    init_logger("DAMSM", log_file)
+    logger.setLevel(logging.DEBUG)  # logger
     args = parse_args()
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
@@ -375,9 +364,10 @@ if __name__ == "__main__":
                 log_model("text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
                 logger.info('Save G/Ds models.')
         stop_tracking()
-    except KeyboardInterrupt:
+    except Exception as e:
         logger.info('-' * 89)
-        logger.info('Exiting from training early')
+        logger.info('Exiting from training with exception')
+        logger.exception(e)
         log_model("image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
         log_model("text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
         logger.info('Save G/Ds models.')

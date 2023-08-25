@@ -120,6 +120,15 @@ def log_model(dir_name, model, model_io_signature):
             ...
 
 
+def except_hook(cls, exception, traceback):
+    """Give us back the original exception hook that may have changed"""
+    from logger import logger
+    
+    logger.exception(cls)
+    logger.exception(exception)
+    mlflow.log_param("Exception", "%s, %s, %s" % (cls, exception, traceback))
+    stop_tracking("ended with exception")
+
 class AspectResize(torch.nn.Module):
     """
    Resize image while keeping the aspect ratio.
