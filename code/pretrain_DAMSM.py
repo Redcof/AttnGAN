@@ -243,7 +243,7 @@ if __name__ == "__main__":
     # Set logging levels
     sys.excepthook = except_hook
     
-    init_logger("DAMSM", log_file)
+    init_logger(log_file)
     logger.setLevel(logging.DEBUG)  # logger
     args = parse_args()
     if args.cfg_file is not None:
