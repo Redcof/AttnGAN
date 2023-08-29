@@ -1,13 +1,18 @@
 from __future__ import print_function
-from dotenv import load_dotenv
 
-from logger import logger
+import logging
+
+from dotenv import load_dotenv
+from torch.utils.data import DataLoader
+
+from logger import logger, init_logger
+from mlflow_utils import except_hook, log_file, AspectResize
 
 load_dotenv('..env')  # take environment variables from .env.
 from miscc.config import cfg, cfg_from_file
 from datasets import TextDataset
 from trainer import condGANTrainer as trainer
-
+from sixray_dataset import SixrayDataset
 import os
 import sys
 import time
@@ -88,6 +93,11 @@ def gen_example(wordtoix, algo):
 
 
 if __name__ == "__main__":
+    sys.excepthook = except_hook
+    
+    init_logger(log_file)
+    from logger import logger
+    logger.setLevel(logging.DEBUG)  # logger
     args = parse_args()
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
@@ -113,7 +123,7 @@ if __name__ == "__main__":
     
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = 'output/%s_%s_%s' % \
+    output_dir = 'output/ATTGAN_%s_%s_%s' % \
                  (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
     
     split_dir, bshuffle = 'train', True
@@ -123,18 +133,33 @@ if __name__ == "__main__":
     
     # Get data loader
     imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM - 1))
-    image_transform = transforms.Compose([
-        transforms.Resize(int(imsize * 76 / 64)),
-        transforms.RandomCrop(imsize),
-        transforms.RandomHorizontalFlip()])
-    dataset = TextDataset(cfg.DATA_DIR, split_dir,
-                          base_size=cfg.TREE.BASE_SIZE,
-                          transform=image_transform)
-    assert dataset
-    dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
-        drop_last=True, shuffle=bshuffle, num_workers=int(cfg.WORKERS))
+    batch_size = cfg.TRAIN.BATCH_SIZE
+    if cfg.DATASET_NAME == "birds":
+        image_transform = transforms.Compose([
+            transforms.Resize(int(imsize * 76 / 64)),
+            transforms.RandomCrop(imsize),
+            transforms.RandomHorizontalFlip()])
+        dataset = TextDataset(cfg.DATA_DIR, split_dir,
+                              base_size=cfg.TREE.BASE_SIZE,
+                              transform=image_transform)
+        model_io_signature = None
+        assert dataset
+    elif cfg.DATASET_NAME == "sixray":
+        image_transform = transforms.Compose([
+            AspectResize(int(imsize * 76 / 64)),
+            # transforms.RandomCrop(imsize),
+            transforms.RandomHorizontalFlip()])
+        dataset = SixrayDataset(cfg.DATA_DIR, split_dir,
+                                base_size=cfg.TREE.BASE_SIZE,
+                                transform=image_transform)
+        model_io_signature = None
+        assert dataset
     
+    else:
+        logger.error("NotImplementedError(cfg.DATASET_NAME = '%s')" % cfg.DATASET_NAME)
+        raise NotImplementedError("cfg.DATASET_NAME = '%s'" % cfg.DATASET_NAME)
+    dataloader = DataLoader(dataset, batch_size=batch_size, drop_last=True,
+                            shuffle=True, num_workers=int(cfg.WORKERS))
     # Define models and go to train/evaluate
     algo = trainer(output_dir, dataloader, dataset.n_words, dataset.ixtoword)
     
@@ -148,4 +173,4 @@ if __name__ == "__main__":
         else:
             gen_example(dataset.wordtoix, algo)  # generate images for customized captions
     end_t = time.time()
-    logger.info('Total time for training: %d'% (end_t - start_t))
+    logger.info('Total time for training: %d' % (end_t - start_t))

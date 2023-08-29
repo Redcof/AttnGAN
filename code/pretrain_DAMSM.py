@@ -242,8 +242,12 @@ def build_models():
 if __name__ == "__main__":
     # Set logging levels
     sys.excepthook = except_hook
+    now = datetime.datetime.now(dateutil.tz.tzlocal())
+    timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
+    output_dir = 'output/DAMSM_%s_%s_%s' % (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
+    cfg.OUTPUT_DIR = output_dir
+    init_logger(os.path.join(output_dir, "log.txt"))
     
-    init_logger(log_file)
     logger.setLevel(logging.DEBUG)  # logger
     args = parse_args()
     if args.cfg_file is not None:
@@ -269,10 +273,6 @@ if __name__ == "__main__":
         torch.cuda.manual_seed_all(args.manualSeed)
     
     ##########################################################################
-    now = datetime.datetime.now(dateutil.tz.tzlocal())
-    timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = 'output/DAMSM_%s_%s_%s' % (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
-    cfg.OUTPUT_DIR = output_dir
     
     model_dir = os.path.join(output_dir, 'Model')
     image_dir = os.path.join(output_dir, 'Image')

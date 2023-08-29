@@ -17,7 +17,7 @@ TRAIN:
   BATCH_SIZE: 10 # total 2361 images, with batch-size (8, 10,  20, 40, 59) remainder is 1
   MAX_EPOCH: 2
   SNAPSHOT_INTERVAL: 1 # epoch
-  ARTIFACT_INTERVAL_GLOBAL_STEP: 10 # global step
+  ARTIFACT_INTERVAL_GLOBAL_STEP: 1 # global step
   ENCODER_LR: 0.002  # 0.0002best; 0.002good; scott: 0.0007 with 0.98decay
   RNN_GRAD_CLIP: 0.25
   SMOOTH:
