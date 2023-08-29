@@ -102,10 +102,10 @@ def save_image(epoch_idx, train_losses, train_performance_dict):
         self.sample_output = None
 
 
-def log_model(dir_name, model, model_io_signature):
-    logger.info("Saving local model: '%s'" % ("output/%s_%s" % (timestamp, dir_name)))
-    torch.save(model.state_dict(), "output/%s_%s" % (timestamp, dir_name))
-    if model_io_signature is not None and cfg.framework == "pytorch":
+def log_model(op_root, dir_name, model, model_io_signature):
+    logger.info("Saving local model: '%s'" % ("%s/%s" % (op_root, dir_name)))
+    torch.save(model.state_dict(), "%s/%s" % (op_root, dir_name))
+    if cfg.framework == "pytorch":
         try:
             logger.info("Logging eager-model to mlflow backend...'%s'" % ("output/%s/model" % dir_name))
             mlflow.pytorch.log_model(
@@ -115,6 +115,7 @@ def log_model(dir_name, model, model_io_signature):
                 pip_requirements="./requirements.txt",
             )
             logger.info("Done")
+            logger.info('Save G/Ds models.')
         except Exception as e:
             logger.exception(e)
             ...

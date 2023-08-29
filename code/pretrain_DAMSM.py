@@ -356,19 +356,14 @@ if __name__ == "__main__":
             
             if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
                 epoch == cfg.TRAIN.MAX_EPOCH):
-                # torch.save(image_encoder.state_dict(),
-                #            '%s/image_encoder%d.pth' % (model_dir, epoch))
-                # torch.save(text_encoder.state_dict(),
-                #            '%s/text_encoder%d.pth' % (model_dir, epoch))
-                log_model("image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
-                log_model("text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
-                logger.info('Save G/Ds models.')
+                log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
+                log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
         stop_tracking()
     except Exception as e:
         logger.info('-' * 89)
         logger.info('Exiting from training with exception')
         logger.exception(e)
-        log_model("image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
-        log_model("text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
-        logger.info('Save G/Ds models.')
+        log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
+        log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
         stop_tracking("Killed by user")
+    logger.info("Output saved at: '%s'" % cfg.OUTPUT_DIR)
