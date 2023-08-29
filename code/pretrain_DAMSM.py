@@ -5,7 +5,7 @@ import logging
 import mlflow
 from dotenv import load_dotenv
 
-from logger import logger, init_logger
+from logger import logger, attach_file_to_logger
 from mlflow_utils import start_tracking, stop_tracking, log_model, log_file, AspectResize, except_hook
 
 load_dotenv('.env')  # take environment variables from .env.
@@ -246,9 +246,16 @@ if __name__ == "__main__":
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
     output_dir = 'output/DAMSM_%s_%s_%s' % (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
     cfg.OUTPUT_DIR = output_dir
-    init_logger(os.path.join(output_dir, "log.txt"))
     
+    ##########################################################################
+    model_dir = os.path.join(output_dir, 'Model')
+    image_dir = os.path.join(output_dir, 'Image')
+    mkdir_p(model_dir)
+    mkdir_p(image_dir)
+    ##########################################################################
+    attach_file_to_logger(os.path.join(output_dir, "log.txt"))
     logger.setLevel(logging.DEBUG)  # logger
+    ##########################################################################
     args = parse_args()
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
@@ -271,14 +278,6 @@ if __name__ == "__main__":
     torch.manual_seed(args.manualSeed)
     if cfg.CUDA:
         torch.cuda.manual_seed_all(args.manualSeed)
-    
-    ##########################################################################
-    
-    model_dir = os.path.join(output_dir, 'Model')
-    image_dir = os.path.join(output_dir, 'Image')
-    mkdir_p(model_dir)
-    mkdir_p(image_dir)
-    
     torch.cuda.set_device(cfg.GPU_ID)
     cudnn.benchmark = True
     

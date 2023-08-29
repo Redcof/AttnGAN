@@ -5,7 +5,8 @@ import logging
 from dotenv import load_dotenv
 from torch.utils.data import DataLoader
 
-from logger import logger, init_logger
+from logger import logger, attach_file_to_logger
+from miscc.utils import mkdir_p
 from mlflow_utils import except_hook, log_file, AspectResize
 
 load_dotenv('..env')  # take environment variables from .env.
@@ -94,9 +95,6 @@ def gen_example(wordtoix, algo):
 
 if __name__ == "__main__":
     sys.excepthook = except_hook
-    
-    init_logger(log_file)
-    from logger import logger
     logger.setLevel(logging.DEBUG)  # logger
     args = parse_args()
     if args.cfg_file is not None:
@@ -120,12 +118,14 @@ if __name__ == "__main__":
     torch.manual_seed(args.manualSeed)
     if cfg.CUDA:
         torch.cuda.manual_seed_all(args.manualSeed)
-    
+    # ############################################################
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
     output_dir = 'output/ATTGAN_%s_%s_%s' % \
                  (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
-    
+    mkdir_p(output_dir)
+    attach_file_to_logger(os.path.join(output_dir, "log.txt"))
+    # ###########################################################
     split_dir, bshuffle = 'train', True
     if not cfg.TRAIN.FLAG:
         # bshuffle = False

@@ -127,6 +127,7 @@ def except_hook(cls, exception, traceback):
     mlflow.log_param("Exception", "%s, %s, %s" % (cls, exception, traceback))
     stop_tracking("ended with exception")
 
+
 class AspectResize(torch.nn.Module):
     """
    Resize image while keeping the aspect ratio.
