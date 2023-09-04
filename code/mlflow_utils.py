@@ -47,7 +47,7 @@ def is_early_stop(epoch_idx=-1):
             dict(early_stop="requested epoch=%d, actual=%d" % (cfg_earl_stp.stop_at_epoch, epoch_idx))
         )
         return True
-    if cfg_earl_stp.stop_at_epoch > cfg.train.max_epoch:
+    if cfg_earl_stp.stop_at_epoch > cfg.TRAIN.MAX_EPOCH:
         logger.info("EPOCH EXTENDED form:%d to:%d" % (cfg.TRAIN.MAX_EPOCH, cfg_earl_stp.stop_at_epoch))
         cfg.TRAIN.MAX_EPOCH = cfg_earl_stp.stop_at_epoch
     return False
