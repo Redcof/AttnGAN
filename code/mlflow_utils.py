@@ -54,10 +54,10 @@ def is_early_stop(epoch_idx=-1):
 
 
 def can_i_log_model(epoch_idx, loss=None, train_performance=None, test_performance=None):
-    schedule_type = cfg.train.save_schedule.type
-    schedule_key = cfg.train.save_schedule.key
-    schedule_delta = cfg.train.save_schedule.value_delta
-    threshold = cfg.train.save_schedule.threshold
+    schedule_type = cfg.TRAIN.save_schedule.type
+    schedule_key = cfg.TRAIN.save_schedule.key
+    schedule_delta = cfg.TRAIN.save_schedule.value_delta
+    threshold = cfg.TRAIN.save_schedule.threshold
     flag = False
     if schedule_type == "epoch":
         if epoch_idx % schedule_key == 0:
