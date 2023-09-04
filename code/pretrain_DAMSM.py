@@ -6,7 +6,8 @@ import mlflow
 from dotenv import load_dotenv
 
 from logger import logger, attach_file_to_logger
-from mlflow_utils import start_tracking, stop_tracking, log_model, log_file, AspectResize, except_hook
+from mlflow_utils import start_tracking, stop_tracking, log_model, AspectResize, except_hook, can_i_log_model, \
+    is_early_stop
 
 load_dotenv('.env')  # take environment variables from .env.
 
@@ -105,15 +106,18 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
         #
         loss.backward()
         elapsed = time.time() - start_time
-        mlflow.log_metrics(dict(
-            train_batch_ms=elapsed,
-            train_batch_s_loss0=s_loss0.item(),
-            train_batch_s_loss1=s_loss1.item(),
-            train_batch_w_loss0=w_loss0.item(),
-            train_batch_w_loss1=w_loss1.item(),
-            train_batch_s_loss=(s_loss0 + s_loss1).item(),
-            train_batch_w_loss=(w_loss0 + w_loss1).item(),
-        ), step=batch_id)
+        try:
+            mlflow.log_metrics(dict(
+                train_batch_ms=elapsed,
+                train_batch_s_loss0=s_loss0.item(),
+                train_batch_s_loss1=s_loss1.item(),
+                train_batch_w_loss0=w_loss0.item(),
+                train_batch_w_loss1=w_loss1.item(),
+                train_batch_s_loss=(s_loss0 + s_loss1).item(),
+                train_batch_w_loss=(w_loss0 + w_loss1).item(),
+            ), step=global_step)
+        except Exception as e:
+            logger.exception(e)
         logger.info('| Training epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} '
                     's_loss {:5.2f} {:5.2f} | '
                     'w_loss {:5.2f} {:5.2f}'
@@ -138,16 +142,23 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
                 fullpath = '%s/attention_maps_epoch_%d_batch_%d.png' % (image_dir, epoch, batch_id)
                 im.save(fullpath)
                 mlflow.log_artifact(fullpath, "output/images")
+        if is_early_stop(epoch_idx):
+            break
+        # #### BATCH LOOP ############
     s_cur_loss = s_total_loss.item() / (batch_id + 1)
     w_cur_loss = w_total_loss.item() / (batch_id + 1)
-    mlflow.log_metrics(dict(
-        train_epoch_s_loss0=s_loss0.item(),
-        train_epoch_s_loss1=s_loss1.item(),
-        train_epoch_w_loss0=w_loss0.item(),
-        train_epoch_w_loss1=w_loss1.item(),
-        train_epoch_s_loss=s_cur_loss,
-        train_epoch_w_loss=w_cur_loss,
-    ), step=epoch)
+    try:
+        mlflow.log_metrics(dict(
+            train_epoch_s_loss0=s_loss0.item(),
+            train_epoch_s_loss1=s_loss1.item(),
+            train_epoch_w_loss0=w_loss0.item(),
+            train_epoch_w_loss1=w_loss1.item(),
+            train_epoch_s_loss=s_cur_loss,
+            train_epoch_w_loss=w_cur_loss,
+        ), step=epoch)
+    except Exception as e:
+        logger.exception(e)
+    
     return global_step
 
 
@@ -162,7 +173,7 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size):
     w_total_loss = 0
     batch_id = 0
     for batch_id, data in enumerate(dataloader, 0):
-        global_step = epoch * len(dataloader) + batch_id
+        global_step = epoch_idx * len(dataloader) + batch_id
         real_imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
         
         words_features, sent_code = cnn_model(real_imgs[-1])
@@ -191,7 +202,7 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size):
         logger.info('| Evaluating epoch {:3d} | {:5d} '
                     's_loss {:5.2f} {:5.2f} | '
                     'w_loss {:5.2f} {:5.2f}'
-                    .format(epoch, batch_id, len(dataloader),
+                    .format(epoch_idx, batch_id, len(dataloader),
                             s_loss0, s_loss1,
                             w_loss0, w_loss1))
     
@@ -205,7 +216,7 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size):
         test_epoch_w_loss1=w_loss1.item(),
         test_epoch_s_loss=s_cur_loss,
         test_epoch_w_loss=w_cur_loss,
-    ), step=epoch)
+    ), step=epoch_idx)
     
     return s_cur_loss, w_cur_loss
 
@@ -253,7 +264,8 @@ if __name__ == "__main__":
     mkdir_p(model_dir)
     mkdir_p(image_dir)
     ##########################################################################
-    attach_file_to_logger(os.path.join(output_dir, "log.txt"))
+    cfg.log_file = os.path.join(output_dir, "log.txt")
+    attach_file_to_logger(cfg.log_file)
     logger.setLevel(logging.DEBUG)  # logger
     ##########################################################################
     args = parse_args()
@@ -333,14 +345,15 @@ if __name__ == "__main__":
     # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
     # At any point you can hit Ctrl + C to break out of training early.
     start_tracking()
-    epoch = start_epoch
+    epoch_idx = start_epoch
     try:
         lr = cfg.TRAIN.ENCODER_LR
-        for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
+        # ### ##### TRAIN LOOP STARTS ##########
+        while epoch_idx <= cfg.TRAIN.MAX_EPOCH:
             optimizer = optim.Adam(para, lr=lr, betas=(0.5, 0.999))
             epoch_start_time = time.time()
             count = train(dataloader, image_encoder, text_encoder,
-                          batch_size, labels, optimizer, epoch,
+                          batch_size, labels, optimizer, epoch_idx,
                           dataset.ixtoword, image_dir)
             logger.info('-' * 89)
             if len(dataloader_val) > 0:
@@ -348,21 +361,28 @@ if __name__ == "__main__":
                                           text_encoder, batch_size)
                 logger.info('| end epoch {:3d} | valid loss '
                             '{:5.2f} {:5.2f} | lr {:.5f}|'
-                            .format(epoch, s_loss, w_loss, lr))
+                            .format(epoch_idx, s_loss, w_loss, lr))
+                # model logging routine
+                if can_i_log_model(epoch_idx) or can_i_log_model(epoch_idx, s_loss.item()):
+                    log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch_idx, image_encoder, model_io_signature)
+                    log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch_idx, text_encoder, model_io_signature)
             logger.info('-' * 89)
             if lr > cfg.TRAIN.ENCODER_LR / 10.:
                 lr *= 0.98
-            
-            if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
-                epoch == cfg.TRAIN.MAX_EPOCH):
-                log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
-                log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
+            if can_i_log_model(epoch_idx):
+                log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch_idx, image_encoder, model_io_signature)
+                log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch_idx, text_encoder, model_io_signature)
+            if is_early_stop(epoch_idx):
+                break
+            epoch_idx += 1
+        
+        # ######### TRAIN LOOP ENDS ########
         stop_tracking()
     except Exception as e:
         logger.info('-' * 89)
         logger.info('Exiting from training with exception')
         logger.exception(e)
-        log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch, image_encoder, model_io_signature)
-        log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch, text_encoder, model_io_signature)
-        stop_tracking("Killed by user")
+        log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch_idx, image_encoder, model_io_signature)
+        log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch_idx, text_encoder, model_io_signature)
+        stop_tracking("Exception: %s" % (str(e)))
     logger.info("Output saved at: '%s'" % cfg.OUTPUT_DIR)

@@ -17,6 +17,11 @@ TRAIN:
   BATCH_SIZE: 10 # total 2361 images, with batch-size (8, 10,  20, 40, 59) remainder is 1
   MAX_EPOCH: 2
   SNAPSHOT_INTERVAL: 1 # epoch
+  save_schedule: # config when to save/log model
+    type: metric # [epoch: epoch intervals, metric: highest performance, loss: lowest loss]
+    key: s_loss # [if type=epoch, key=<integer>, if type=metric, key=<metric_name>, if type=loss, key=<loss_name>(in case we have multiple losses)]
+    threshold: 2.0 # [minimum threshold after which the models should be considered for logging]
+    value_delta: 0.02 # [an increase threshold of performance and a decrease loss to log the model]
   ARTIFACT_INTERVAL_GLOBAL_STEP: 1 # global step
   ENCODER_LR: 0.002  # 0.0002best; 0.002good; scott: 0.0007 with 0.98decay
   RNN_GRAD_CLIP: 0.25
