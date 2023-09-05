@@ -53,7 +53,8 @@ def is_early_stop(epoch_idx=-1):
     return False
 
 
-def can_i_log_model(epoch_idx, loss=None, train_performance=None, test_performance=None):
+def can_i_log_model(epoch_idx: int, loss: torch.Tensor = None, train_performance: dict = None,
+                    test_performance: dict = None):
     schedule_type = cfg.TRAIN.save_schedule.type
     schedule_key = cfg.TRAIN.save_schedule.key
     schedule_delta = cfg.TRAIN.save_schedule.value_delta

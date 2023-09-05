@@ -363,7 +363,8 @@ if __name__ == "__main__":
                             '{:5.2f} {:5.2f} | lr {:.5f}|'
                             .format(epoch_idx, s_loss, w_loss, lr))
                 # model logging routine
-                if can_i_log_model(epoch_idx) or can_i_log_model(epoch_idx, s_loss.item()):
+                loss = w_loss if cfg.TRAIN.save_schedule.key == "w_loss" else s_loss
+                if can_i_log_model(epoch_idx) or can_i_log_model(epoch_idx, loss):
                     log_model(cfg.OUTPUT_DIR, "image_encoder_epoch_%d" % epoch_idx, image_encoder, model_io_signature)
                     log_model(cfg.OUTPUT_DIR, "text_encoder_epoch_%d" % epoch_idx, text_encoder, model_io_signature)
             logger.info('-' * 89)
