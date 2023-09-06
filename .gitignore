@@ -6,3 +6,4 @@ code/miscc/*.pyc
 .idea/
 .env
 /log*.txt
+/mlruns/

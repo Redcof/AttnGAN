@@ -18,7 +18,7 @@ TRAIN:
   MAX_EPOCH: 2
   SNAPSHOT_INTERVAL: 1 # epoch
   save_schedule: # config when to save/log model
-    type: metric # [epoch: epoch intervals, metric: highest performance, loss: lowest loss]
+    type: loss # [epoch: epoch intervals, metric: highest performance, loss: lowest loss]
     key: s_loss # [if type=epoch, key=<integer>, if type=metric, key=<metric_name>, if type=loss, key=<loss_name>(in case we have multiple losses)]
     threshold: 2.0 # [minimum threshold after which the models should be considered for logging]
     value_delta: 0.02 # [an increase threshold of performance and a decrease loss to log the model]

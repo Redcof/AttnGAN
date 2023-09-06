@@ -1,4 +1,7 @@
 from __future__ import print_function
+
+import mlflow
+from mlflow import MlflowClient
 from six.moves import range
 
 import torch
@@ -14,6 +17,7 @@ from miscc.config import cfg
 from miscc.utils import mkdir_p
 from miscc.utils import build_super_images, build_super_images2
 from miscc.utils import weights_init, load_params, copy_G_params
+from mlflow_utils import log_model, is_early_stop, can_i_log_model
 from model import G_DCGAN, G_NET
 from datasets import prepare_data
 from model import RNN_ENCODER, CNN_ENCODER
@@ -47,28 +51,46 @@ class condGANTrainer(object):
         self.data_loader = data_loader
         self.num_batches = len(self.data_loader)
     
+    def load_pytorch(self, model_path, model_object=None):
+        if model_path.startswith('runs:'):
+            model_object = mlflow.pytorch.load_model(model_path)
+        elif model_path.startswith('artifacts:'):
+            # run_id = model_path.split(';')[0].replace('artifacts:', '').strip()
+            # artifact_path = model_path.split(';')[1].replace('artifact:', '').strip()
+            # client = MlflowClient()
+            # artifact_local = os.path.join(cfg.OUTPUT_DIR, artifact_path)
+            # mkdir_p(artifact_local)
+            # pth_file = client.download_artifacts(run_id, artifact_path, artifact_local)
+            # state_dict = torch.load(pth_file, map_location=lambda storage, loc: storage)
+            # model_object.load_state_dict(state_dict)
+            ...
+        elif model_path.startswith('mlflow:'):
+            path_ = model_path.replace("mlflow:", "").strip()
+            model_object = torch.load(path_, map_location=lambda storage, loc: storage)
+        else:
+            state_dict = torch.load(model_path, map_location=lambda storage, loc: storage)
+            model_object.load_state_dict(state_dict)
+        return model_object
+    
     def build_models(self):
         # ###################encoders######################################## #
         if cfg.TRAIN.NET_E == '':
-            print('Error: no pretrained text-image encoders')
-            return
-        
-        image_encoder = CNN_ENCODER(cfg.TEXT.EMBEDDING_DIM)
+            raise ValueError('Error: no pretrained text-image encoders. "cfg.TRAIN.NET_E" is empty')
+        # DAMSM load image encoder
         img_encoder_path = cfg.TRAIN.NET_E.replace('text_encoder', 'image_encoder')
-        state_dict = torch.load(img_encoder_path, map_location=lambda storage, loc: storage)
-        image_encoder.load_state_dict(state_dict)
+        image_encoder = self.load_pytorch(img_encoder_path,
+                                          model_object=CNN_ENCODER(cfg.TEXT.EMBEDDING_DIM))
+        # set for no-gradient
         for p in image_encoder.parameters():
             p.requires_grad = False
-        print('Load image encoder from:', img_encoder_path)
+        logger.info('Load image encoder from: %s' % img_encoder_path)
         image_encoder.eval()
-        
-        text_encoder = RNN_ENCODER(self.n_words, nhidden=cfg.TEXT.EMBEDDING_DIM)
-        state_dict = torch.load(cfg.TRAIN.NET_E,
-                                map_location=lambda storage, loc: storage)
-        text_encoder.load_state_dict(state_dict)
+        # DAMSM load text encoder
+        text_encoder = self.load_pytorch(cfg.TRAIN.NET_E,
+                                         model_object=RNN_ENCODER(self.n_words, nhidden=cfg.TEXT.EMBEDDING_DIM))
         for p in text_encoder.parameters():
             p.requires_grad = False
-        print('Load text encoder from:', cfg.TRAIN.NET_E)
+        logger.info('Load text encoder from: %s' % cfg.TRAIN.NET_E)
         text_encoder.eval()
         
         # #######################generator and discriminators############## #
@@ -98,13 +120,13 @@ class condGANTrainer(object):
         for i in range(len(netsD)):
             netsD[i].apply(weights_init)
             # print(netsD[i])
-        print('# of netsD', len(netsD))
+        logger.info('No.# of netsD: %d' % len(netsD))
         #
         epoch = 0
         if cfg.TRAIN.NET_G != '':
             state_dict = torch.load(cfg.TRAIN.NET_G, map_location=lambda storage, loc: storage)
             netG.load_state_dict(state_dict)
-            print('Load G from: ', cfg.TRAIN.NET_G)
+            logger.info('Load G from: %s' % cfg.TRAIN.NET_G)
             istart = cfg.TRAIN.NET_G.rfind('_') + 1
             iend = cfg.TRAIN.NET_G.rfind('.')
             epoch = cfg.TRAIN.NET_G[istart:iend]
@@ -114,7 +136,7 @@ class condGANTrainer(object):
                 for i in range(len(netsD)):
                     s_tmp = Gname[:Gname.rfind('/')]
                     Dname = '%s/netD%d.pth' % (s_tmp, i)
-                    print('Load D from: ', Dname)
+                    logger.info('Load D from: %s' % Dname)
                     state_dict = torch.load(Dname, map_location=lambda storage, loc: storage)
                     netsD[i].load_state_dict(state_dict)
         # ########################################################### #
@@ -124,7 +146,7 @@ class condGANTrainer(object):
             netG.cuda()
             for i in range(len(netsD)):
                 netsD[i].cuda()
-        return [text_encoder, image_encoder, netG, netsD, epoch]
+        return text_encoder, image_encoder, netG, netsD, epoch
     
     def define_optimizers(self, netG, netsD):
         optimizersD = []
@@ -153,18 +175,15 @@ class condGANTrainer(object):
         
         return real_labels, fake_labels, match_labels
     
-    def save_model(self, netG, avg_param_G, netsD, epoch):
-        backup_para = copy_G_params(netG)
-        load_params(netG, avg_param_G)
-        torch.save(netG.state_dict(),
-                   '%s/netG_epoch_%d.pth' % (self.model_dir, epoch))
-        load_params(netG, backup_para)
-        #
-        for i in range(len(netsD)):
-            netD = netsD[i]
-            torch.save(netD.state_dict(),
-                       '%s/netD%d.pth' % (self.model_dir, i))
-        print('Save G/Ds models.')
+    def save_model(self, netG, netsD, epoch):
+        try:
+            log_model(self.model_dir, "netG_epoch_%d.pth" % epoch, netG, None)
+            # save discriminator models
+            for i in range(len(netsD)):
+                netD = netsD[i]
+                log_model(self.model_dir, "netD_epoch_%d_%dth.pth" % (epoch, i), netD, None)
+        except Exception as e:
+            logger.exception(e)
     
     def set_requires_grad_value(self, models_list, brequires):
         for i in range(len(models_list)):
@@ -176,43 +195,49 @@ class condGANTrainer(object):
                          gen_iterations, name='current'):
         # Save images
         fake_imgs, attention_maps, _, _ = netG(noise, sent_emb, words_embs, mask)
-        for i in range(len(attention_maps)):
+        for attnmap_idx in range(len(attention_maps)):
             if len(fake_imgs) > 1:
-                img = fake_imgs[i + 1].detach().cpu()
-                lr_img = fake_imgs[i].detach().cpu()
+                img = fake_imgs[attnmap_idx + 1].detach().cpu()
+                lr_img = fake_imgs[attnmap_idx].detach().cpu()
             else:
                 img = fake_imgs[0].detach().cpu()
                 lr_img = None
-            attn_maps = attention_maps[i]
+            attn_maps = attention_maps[attnmap_idx]
             att_sze = attn_maps.size(2)
             img_set, _ = build_super_images(img, captions, self.ixtoword,
                                             attn_maps, att_sze, lr_imgs=lr_img)
             if img_set is not None:
                 im = Image.fromarray(img_set)
-                fullpath = '%s/G_%s_%d_%d.png' \
-                           % (self.image_dir, name, gen_iterations, i)
+                fullpath = '%s/G_%s_%d_%d.png' % (self.image_dir, name, gen_iterations, attnmap_idx)
                 im.save(fullpath)
+                try:
+                    mlflow.log_artifact(fullpath, "output/images")
+                except Exception as e:
+                    logger.exception(e)
         
         # for i in range(len(netsD)):
-        i = -1
-        img = fake_imgs[i].detach()
+        attnmap_idx = -1
+        img = fake_imgs[attnmap_idx].detach()
         region_features, _ = image_encoder(img)
         att_sze = region_features.size(2)
         _, _, att_maps = words_loss(region_features.detach(),
                                     words_embs.detach(),
                                     None, cap_lens,
                                     None, self.batch_size)
-        img_set, _ = build_super_images(fake_imgs[i].detach().cpu(),
+        img_set, _ = build_super_images(fake_imgs[attnmap_idx].detach().cpu(),
                                         captions, self.ixtoword, att_maps, att_sze)
         if img_set is not None:
             im = Image.fromarray(img_set)
-            fullpath = '%s/D_%s_%d.png' \
-                       % (self.image_dir, name, gen_iterations)
+            fullpath = '%s/D_%s_%d.png' % (self.image_dir, name, gen_iterations)
             im.save(fullpath)
+            try:
+                mlflow.log_artifact(fullpath, "output/images")
+            except Exception as e:
+                logger.exception(e)
     
     def train(self):
         text_encoder, image_encoder, netG, netsD, start_epoch = self.build_models()
-        avg_param_G = copy_G_params(netG)
+        # avg_param_G = copy_G_params(netG)
         optimizerG, optimizersD = self.define_optimizers(netG, netsD)
         real_labels, fake_labels, match_labels = self.prepare_labels()
         
@@ -225,18 +250,22 @@ class condGANTrainer(object):
         
         gen_iterations = 0
         # gen_iterations = start_epoch * self.num_batches
-        for epoch in range(start_epoch, self.max_epoch):
+        # ## ##### TRAIn LOOP ######################
+        epoch_idx = start_epoch
+        while epoch_idx <= cfg.TRAIN.MAX_EPOCH:
             start_t = time.time()
             
             data_iter = iter(self.data_loader)
-            step = 0
-            while step < self.num_batches:
+            batch_idx = 0
+            # # ########### EPOCH LOOP #########
+            while batch_idx < self.num_batches:
+                global_step = epoch_idx * len(self.data_loader) + batch_idx
                 # reset requires_grad to be trainable for all Ds
                 # self.set_requires_grad_value(netsD, True)
                 
-                ######################################################
+                #######################################################
                 # (1) Prepare training data and Compute text embeddings
-                ######################################################
+                #######################################################
                 data = next(data_iter)
                 imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
                 
@@ -263,8 +292,7 @@ class condGANTrainer(object):
                 D_logs = ''
                 for i in range(len(netsD)):
                     netsD[i].zero_grad()
-                    errD = discriminator_loss(netsD[i], imgs[i], fake_imgs[i],
-                                              sent_emb, real_labels, fake_labels)
+                    errD = discriminator_loss(netsD[i], imgs[i], fake_imgs[i], sent_emb, real_labels, fake_labels)
                     # backward and update parameters
                     errD.backward()
                     optimizersD[i].step()
@@ -275,7 +303,7 @@ class condGANTrainer(object):
                 # (4) Update G network: maximize log(D(G(z)))
                 ######################################################
                 # compute total loss for training G
-                step += 1
+                batch_idx += 1
                 gen_iterations += 1
                 
                 # do not need to compute gradient for Ds
@@ -285,46 +313,64 @@ class condGANTrainer(object):
                                                     words_embs, sent_emb, match_labels, cap_lens, class_ids)
                 kl_loss = KL_loss(mu, logvar)
                 errG_total += kl_loss
-                G_logs += 'kl_loss: %.2f ' % kl_loss.data[0]
+                G_logs += 'kl_loss: %.2f ' % kl_loss.item()
                 # backward and update parameters
                 errG_total.backward()
                 optimizerG.step()
-                for p, avg_p in zip(netG.parameters(), avg_param_G):
-                    avg_p.mul_(0.999).add_(0.001, p.data)
+                # for p, avg_p in zip(netG.parameters(), avg_param_G):
+                #     avg_p.mul_(0.999).add_(0.001, p.data)
                 
-                if gen_iterations % 100 == 0:
-                    logger.info("%s"%D_logs + '\n' + G_logs)
+                logger.info('''[%d/%d][%d/%d]
+                                  Loss_D: %.2f Loss_G: %.2f ''' % (
+                    epoch_idx, self.max_epoch, batch_idx, self.num_batches, errD_total.item(), errG_total.item()))
+                
                 # save images
-                if gen_iterations % 1000 == 0:
-                    backup_para = copy_G_params(netG)
-                    load_params(netG, avg_param_G)
+                if global_step % cfg.TRAIN.ARTIFACT_INTERVAL_GLOBAL_STEP == 0:
                     self.save_img_results(netG, fixed_noise, sent_emb,
                                           words_embs, mask, image_encoder,
-                                          captions, cap_lens, epoch, name='average')
-                    load_params(netG, backup_para)
-                    #
-                    # self.save_img_results(netG, fixed_noise, sent_emb,
-                    #                       words_embs, mask, image_encoder,
-                    #                       captions, cap_lens,
-                    #                       epoch, name='current')
+                                          captions, cap_lens,
+                                          epoch_idx, name='current-epoch_%d-batch_%d' % (epoch_idx, batch_idx))
+                try:
+                    mlflow.log_metrics(dict(
+                        train_batch_loss_D=errD_total.item(),
+                        train_batch_loss_G=errG_total.item()),
+                        step=global_step)
+                except Exception as e:
+                    logger.exception(e)
+                if is_early_stop(epoch_idx):
+                    break
+            # ####### EPOCH LOOP ENDS HERE ######
             end_t = time.time()
-            
-            logger.info('''[%d/%d][%d]
-                  Loss_D: %.2f Loss_G: %.2f Time: %.2fs'''
-                        % (epoch, self.max_epoch, self.num_batches,
-                           errD_total.data[0], errG_total.data[0],
+            logger.info('''[%d/%d][%d]Loss_D: %.2f Loss_G: %.2f Time: %.2fs'''
+                        % (epoch_idx, self.max_epoch, self.num_batches,
+                           errD_total.item(), errG_total.item(),
                            end_t - start_t))
-            
-            if epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:  # and epoch != 0:
-                self.save_model(netG, avg_param_G, netsD, epoch)
-        
-        self.save_model(netG, avg_param_G, netsD, self.max_epoch)
+            try:
+                mlflow.log_metrics(dict(
+                    train_epoch_loss_D=errD_total.item(),
+                    train_epoch_loss_G=errG_total.item()
+                ), step=epoch_idx)
+            except Exception as e:
+                logger.exception(e)
+            # MODEL LOGGING
+            loss = errD_total if cfg.TRAIN.save_schedule.key == "loss_D" else errG_total
+            if can_i_log_model(epoch_idx) or can_i_log_model(epoch_idx, loss):
+                log_model(cfg.OUTPUT_DIR, "netG_%d" % epoch_idx, netG, None)
+                for netD_idx, netD in enumerate(netsD):
+                    log_model(cfg.OUTPUT_DIR, "netsD_id-%d_%d" % (netD_idx, epoch_idx), netD, None)
+            if is_early_stop(epoch_idx):
+                break
+            epoch_idx += 1
+        # ############################################################################
+        if can_i_log_model(epoch_idx):
+            log_model(cfg.OUTPUT_DIR, "netG_%d" % epoch_idx, netG, None)
+            for netD_idx, netD in enumerate(netsD):
+                log_model(cfg.OUTPUT_DIR, "netsD_id-%d_%d" % (netD_idx, epoch_idx), netD, None)
     
     def save_singleimages(self, images, filenames, save_dir,
                           split_dir, sentenceID=0):
         for i in range(images.size(0)):
-            s_tmp = '%s/single_samples/%s/%s' % \
-                    (save_dir, split_dir, filenames[i])
+            s_tmp = '%s/single_samples/%s/%s' % (save_dir, split_dir, filenames[i])
             folder = s_tmp[:s_tmp.rfind('/')]
             if not os.path.isdir(folder):
                 logger.info('Make a new folder: %s' % folder)

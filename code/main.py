@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from logger import logger, attach_file_to_logger
 from miscc.utils import mkdir_p
-from mlflow_utils import except_hook, log_file, AspectResize
+from mlflow_utils import except_hook, AspectResize, stop_tracking
 
 load_dotenv('..env')  # take environment variables from .env.
 from miscc.config import cfg, cfg_from_file
@@ -123,12 +123,14 @@ if __name__ == "__main__":
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
     output_dir = 'output/ATTGAN_%s_%s_%s' % \
                  (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
+    cfg.OUTPUT_DIR = output_dir
+    cfg.log_file = os.path.join(output_dir, "log.txt")
     mkdir_p(output_dir)
-    attach_file_to_logger(os.path.join(output_dir, "log.txt"))
+    attach_file_to_logger(cfg.log_file)
     # ###########################################################
     split_dir, bshuffle = 'train', True
     if not cfg.TRAIN.FLAG:
-        # bshuffle = False
+        # b-shuffle = False
         split_dir = 'test'
     
     # Get data loader
@@ -160,17 +162,25 @@ if __name__ == "__main__":
         raise NotImplementedError("cfg.DATASET_NAME = '%s'" % cfg.DATASET_NAME)
     dataloader = DataLoader(dataset, batch_size=batch_size, drop_last=True,
                             shuffle=True, num_workers=int(cfg.WORKERS))
-    # Define models and go to train/evaluate
-    algo = trainer(output_dir, dataloader, dataset.n_words, dataset.ixtoword)
-    
-    start_t = time.time()
-    if cfg.TRAIN.FLAG:
-        algo.train()
-    else:
-        '''generate images from pre-extracted embeddings'''
-        if cfg.B_VALIDATION:
-            algo.sampling(split_dir)  # generate images for the whole valid dataset
+    try:
+        # Define models and go to train/evaluate
+        algo = trainer(output_dir, dataloader, dataset.n_words, dataset.ixtoword)
+        
+        start_t = time.time()
+        if cfg.TRAIN.FLAG:
+            # model training
+            algo.train()
         else:
-            gen_example(dataset.wordtoix, algo)  # generate images for customized captions
-    end_t = time.time()
-    logger.info('Total time for training: %d' % (end_t - start_t))
+            '''Generate images from pre-extracted embeddings'''
+            if cfg.B_VALIDATION:
+                algo.sampling(split_dir)  # generate images for the whole valid dataset
+            else:
+                gen_example(dataset.wordtoix, algo)  # generate images for customized captions
+        end_t = time.time()
+        logger.info('Total time for training: %d' % (end_t - start_t))
+        stop_tracking()
+    except Exception as e:
+        logger.info('Exiting from training with exception')
+        logger.exception(e)
+        stop_tracking("Exception: %s" % (str(e)))
+    logger.info("Output saved at: '%s'" % cfg.OUTPUT_DIR)

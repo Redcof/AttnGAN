@@ -1,7 +1,7 @@
-CONFIG_NAME: 'attn2'
-
-DATASET_NAME: 'birds'
-DATA_DIR: 'data/birds'
+CONFIG_NAME: 'sixray-attn2'
+experiment_description: 'mlflow testing form local machine'
+DATASET_NAME: 'sixray'
+DATA_DIR: './data/sixray_2361'
 GPU_ID: 0
 WORKERS: 4
 
@@ -15,14 +15,20 @@ TRAIN:
     NET_G: ''  # '../models/bird_AttnGAN2.pth'
     B_NET_D: True
     BATCH_SIZE: 6  # 22
-    MAX_EPOCH: 600
+    MAX_EPOCH: 2
     SNAPSHOT_INTERVAL: 50
+    save_schedule: # config when to save/log model
+      type: epoch # [epoch: epoch intervals, metric: highest performance, loss: lowest loss]
+      key: 1 # [if type=epoch, key=<integer>, if type=metric, key=<metric_name>, if type=loss, key=<loss_name>(in case we have multiple losses)]
+      threshold: 2.0 # [minimum threshold after which the models should be considered for logging]
+      value_delta: 0.02 # [an increase threshold of performance and a decrease loss to log the model]
+    ARTIFACT_INTERVAL_GLOBAL_STEP: 20
     DISCRIMINATOR_LR: 0.0002
     GENERATOR_LR: 0.0002
     #
-    NET_E: 'DAMSMencoders/bird/text_encoder200.pth'
+    NET_E: 'mlflow:DAMSMencoders/sixray/text_encoder_150.pth'
     SMOOTH:
-        GAMMA1: 4.0  # 1,2,5 good 4 best  10&100bad
+        GAMMA1: 4.0  # 1,2,5 good 4 best 10&100bad
         GAMMA2: 5.0
         GAMMA3: 10.0  # 10good 1&100bad
         LAMBDA: 5.0
@@ -36,4 +42,4 @@ GAN:
 
 TEXT:
     EMBEDDING_DIM: 256
-    CAPTIONS_PER_IMAGE: 10
+    CAPTIONS_PER_IMAGE: 5

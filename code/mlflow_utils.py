@@ -120,7 +120,10 @@ def stop_tracking(exit_message="ended peacefully"):
         mlflow.log_param("log_file", cfg.log_file)
     except FileNotFoundError as e:
         mlflow.log_param("log_file", str(e))
-    mlflow.log_param("exit_message", exit_message)
+    try:
+        mlflow.log_param("exit_message", exit_message)
+    except Exception as e:
+        logger.exception(e)
     run = mlflow.active_run()
     mlflow.end_run()
     logger.info("Active mlflow run_name:{} run_id: {} stopped".format(run.info.run_name, run.info.run_id))
@@ -207,7 +210,7 @@ def except_hook(cls, exception, traceback):
     logger.exception(cls)
     logger.exception(exception)
     mlflow.log_param("Exception", "%s, %s, %s" % (cls, exception, traceback))
-    stop_tracking("ended with exception")
+    stop_tracking("Ended with exception")
 
 
 class AspectResize(torch.nn.Module):

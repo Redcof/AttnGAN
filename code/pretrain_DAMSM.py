@@ -61,7 +61,7 @@ def parse_args():
 
 
 def train(dataloader, cnn_model, rnn_model, batch_size,
-          labels, optimizer, epoch, ixtoword, image_dir):
+          labels, optimizer, epoch_idx, ixtoword, image_dir):
     cnn_model.train()
     rnn_model.train()
     s_loss0 = 0
@@ -70,11 +70,11 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
     w_loss1 = 0
     s_total_loss = 0
     w_total_loss = 0
-    global_step = (epoch + 1) * len(dataloader)
+    global_step = (epoch_idx + 1) * len(dataloader)
     start_time = time.time()
     batch_id = 0
     for batch_id, data in enumerate(dataloader, 0):
-        global_step = epoch * len(dataloader) + batch_id
+        global_step = epoch_idx * len(dataloader) + batch_id
         # print('batch_id', batch_id)
         rnn_model.zero_grad()
         cnn_model.zero_grad()
@@ -121,7 +121,7 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
         logger.info('| Training epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} '
                     's_loss {:5.2f} {:5.2f} | '
                     'w_loss {:5.2f} {:5.2f}'
-                    .format(epoch, batch_id, len(dataloader),
+                    .format(epoch_idx, batch_id, len(dataloader),
                             elapsed,
                             s_loss0, s_loss1,
                             w_loss0, w_loss1))
@@ -139,7 +139,7 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
                                             ixtoword, attn_maps, att_sze)
             if img_set is not None:
                 im = Image.fromarray(img_set)
-                fullpath = '%s/attention_maps_epoch_%d_batch_%d.png' % (image_dir, epoch, batch_id)
+                fullpath = '%s/attention_maps_epoch_%d_batch_%d.png' % (image_dir, epoch_idx, batch_id)
                 im.save(fullpath)
                 mlflow.log_artifact(fullpath, "output/images")
         if is_early_stop(epoch_idx):
@@ -155,7 +155,7 @@ def train(dataloader, cnn_model, rnn_model, batch_size,
             train_epoch_w_loss1=w_loss1.item(),
             train_epoch_s_loss=s_cur_loss,
             train_epoch_w_loss=w_cur_loss,
-        ), step=epoch)
+        ), step=epoch_idx)
     except Exception as e:
         logger.exception(e)
     
