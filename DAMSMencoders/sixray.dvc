@@ -1,0 +1,6 @@
+outs:
+- md5: ff1ebab44dcacf5a48af9c34acfd6113.dir
+  size: 92319457
+  nfiles: 3
+  hash: md5
+  path: sixray
