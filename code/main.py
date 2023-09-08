@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from logger import logger, attach_file_to_logger
 from miscc.utils import mkdir_p
-from mlflow_utils import except_hook, AspectResize, stop_tracking
+from mlflow_utils import except_hook, AspectResize, stop_tracking, start_tracking
 
 load_dotenv('..env')  # take environment variables from .env.
 from miscc.config import cfg, cfg_from_file
@@ -163,6 +163,7 @@ if __name__ == "__main__":
     dataloader = DataLoader(dataset, batch_size=batch_size, drop_last=True,
                             shuffle=True, num_workers=int(cfg.WORKERS))
     try:
+        start_tracking()
         # Define models and go to train/evaluate
         algo = trainer(output_dir, dataloader, dataset.n_words, dataset.ixtoword)
         
