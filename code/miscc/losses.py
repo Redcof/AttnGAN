@@ -32,12 +32,12 @@ def sent_loss(cnn_code, rnn_code, labels, class_ids,
         masks = torch.ByteTensor(masks)
         if cfg.CUDA:
             masks = masks.cuda()
-
+    
     # --> seq_len x batch_size x nef
     if cnn_code.dim() == 2:
         cnn_code = cnn_code.unsqueeze(0)
         rnn_code = rnn_code.unsqueeze(0)
-
+    
     # cnn_code_norm / rnn_code_norm: seq_len x batch_size x 1
     cnn_code_norm = torch.norm(cnn_code, 2, dim=2, keepdim=True)
     rnn_code_norm = torch.norm(rnn_code, 2, dim=2, keepdim=True)
@@ -45,7 +45,7 @@ def sent_loss(cnn_code, rnn_code, labels, class_ids,
     scores0 = torch.bmm(cnn_code, rnn_code.transpose(1, 2))
     norm0 = torch.bmm(cnn_code_norm, rnn_code_norm.transpose(1, 2))
     scores0 = scores0 / norm0.clamp(min=eps) * cfg.TRAIN.SMOOTH.GAMMA3
-
+    
     # --> batch_size x batch_size
     scores0 = scores0.squeeze()
     if class_ids is not None:
@@ -101,16 +101,16 @@ def words_loss(img_features, words_emb, labels,
         row_sim = cosine_similarity(word, weiContext)
         # --> batch_size x words_num
         row_sim = row_sim.view(batch_size, words_num)
-
+        
         # Eq. (10)
         row_sim.mul_(cfg.TRAIN.SMOOTH.GAMMA2).exp_()
         row_sim = row_sim.sum(dim=1, keepdim=True)
         row_sim = torch.log(row_sim)
-
+        
         # --> 1 x batch_size
         # similarities(i, j): the similarity between the i-th image and the j-th text description
         similarities.append(row_sim)
-
+    
     # batch_size x batch_size
     similarities = torch.cat(similarities, 1)
     if class_ids is not None:
@@ -119,7 +119,7 @@ def words_loss(img_features, words_emb, labels,
         masks = torch.ByteTensor(masks)
         if cfg.CUDA:
             masks = masks.cuda()
-
+    
     similarities = similarities * cfg.TRAIN.SMOOTH.GAMMA3
     if class_ids is not None:
         similarities.data.masked_fill_(masks, -float('inf'))
@@ -148,7 +148,7 @@ def discriminator_loss(netD, real_imgs, fake_imgs, conditions,
     batch_size = real_features.size(0)
     cond_wrong_logits = netD.COND_DNET(real_features[:(batch_size - 1)], conditions[1:batch_size])
     cond_wrong_errD = nn.BCELoss()(cond_wrong_logits, fake_labels[1:batch_size])
-
+    
     if netD.UNCOND_DNET is not None:
         real_logits = netD.UNCOND_DNET(real_features)
         fake_logits = netD.UNCOND_DNET(fake_features)
@@ -173,16 +173,16 @@ def generator_loss(netsD, image_encoder, fake_imgs, real_labels,
         features = netsD[i](fake_imgs[i])
         cond_logits = netsD[i].COND_DNET(features, sent_emb)
         cond_errG = nn.BCELoss()(cond_logits, real_labels)
-        if netsD[i].UNCOND_DNET is  not None:
+        if netsD[i].UNCOND_DNET is not None:
             logits = netsD[i].UNCOND_DNET(features)
             errG = nn.BCELoss()(logits, real_labels)
             g_loss = errG + cond_errG
         else:
             g_loss = cond_errG
         errG_total += g_loss
-        # err_img = errG_total.data[0]
-        logs += 'g_loss%d: %.2f ' % (i, g_loss.data[0])
-
+        # err_img = errG_total.item()
+        logs += 'g_loss%d: %.2f ' % (i, g_loss.item())
+        
         # Ranking loss
         if i == (numDs - 1):
             # words_features: batch_size x nef x 17 x 17
@@ -191,18 +191,16 @@ def generator_loss(netsD, image_encoder, fake_imgs, real_labels,
             w_loss0, w_loss1, _ = words_loss(region_features, words_embs,
                                              match_labels, cap_lens,
                                              class_ids, batch_size)
-            w_loss = (w_loss0 + w_loss1) * \
-                cfg.TRAIN.SMOOTH.LAMBDA
-            # err_words = err_words + w_loss.data[0]
-
+            w_loss = (w_loss0 + w_loss1) * cfg.TRAIN.SMOOTH.LAMBDA
+            # err_words = err_words + w_loss.item()
+            
             s_loss0, s_loss1 = sent_loss(cnn_code, sent_emb,
                                          match_labels, class_ids, batch_size)
-            s_loss = (s_loss0 + s_loss1) * \
-                cfg.TRAIN.SMOOTH.LAMBDA
-            # err_sent = err_sent + s_loss.data[0]
-
+            s_loss = (s_loss0 + s_loss1) * cfg.TRAIN.SMOOTH.LAMBDA
+            # err_sent = err_sent + s_loss.item()
+            
             errG_total += w_loss + s_loss
-            logs += 'w_loss: %.2f s_loss: %.2f ' % (w_loss.data[0], s_loss.data[0])
+            logs += 'w_loss: %.2f s_loss: %.2f ' % (w_loss.item(), s_loss.item())
     return errG_total, logs
 
 

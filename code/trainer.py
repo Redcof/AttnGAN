@@ -251,6 +251,7 @@ class condGANTrainer(object):
         gen_iterations = 0
         # gen_iterations = start_epoch * self.num_batches
         # ## ##### TRAIn LOOP ######################
+        logger.info("Entering into training loop...")
         epoch_idx = start_epoch
         while epoch_idx <= cfg.TRAIN.MAX_EPOCH:
             start_t = time.time()
@@ -297,7 +298,7 @@ class condGANTrainer(object):
                     errD.backward()
                     optimizersD[i].step()
                     errD_total += errD
-                    D_logs += 'errD%d: %.2f ' % (i, errD.data[0])
+                    D_logs += 'errD%d: %.2f ' % (i, errD.item())
                 
                 #######################################################
                 # (4) Update G network: maximize log(D(G(z)))
