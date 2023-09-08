@@ -1,5 +1,5 @@
-CONFIG_NAME: 'sixray-attn2'
-experiment_description: 'mlflow testing form local machine'
+CONFIG_NAME: 'server-sixray-attn2'
+experiment_description: 'Epoch: 200'
 DATASET_NAME: 'sixray'
 DATA_DIR: './data/sixray_2361'
 GPU_ID: 0
@@ -15,7 +15,7 @@ TRAIN:
     NET_G: ''  # '../models/bird_AttnGAN2.pth'
     B_NET_D: True
     BATCH_SIZE: 59
-    MAX_EPOCH: 2
+    MAX_EPOCH: 200
     SNAPSHOT_INTERVAL: 50
     save_schedule: # config when to save/log model
       type: loss # [epoch: epoch intervals, metric: highest performance, loss: lowest loss]
