@@ -1,15 +1,15 @@
 from __future__ import print_function
+from dotenv import load_dotenv
+load_dotenv('.env')  # take environment variables from .env.
 
 import logging
 
 import mlflow
-from dotenv import load_dotenv
-
 from logger import logger, attach_file_to_logger
 from mlflow_utils import start_tracking, stop_tracking, log_model, AspectResize, except_hook, can_i_log_model, \
     is_early_stop
 
-load_dotenv('.env')  # take environment variables from .env.
+
 
 from torch.utils.data import DataLoader
 

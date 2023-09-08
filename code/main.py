@@ -1,5 +1,6 @@
 from __future__ import print_function
-
+from dotenv import load_dotenv
+load_dotenv('.env')  # take environment variables from .env.
 import logging
 
 from dotenv import load_dotenv
